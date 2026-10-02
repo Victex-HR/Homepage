@@ -1,0 +1,85 @@
+@charset "utf-8";
+/* ==========================================================================
+   VICTEX Renewal - HERO (Main Visual)
+   --------------------------------------------------------------------------
+   현행 사이트의 히어로 스타일을 legacy CSS(main.css, media.css)에서 분리해
+   그대로 옮겨 둔 파일. 현재 상태는 원본과 픽셀 단위로 동일하게 보인다.
+   히어로 리뉴얼은 이 파일과 assets/js/hero.js, index.html 의
+   "HERO : START ~ END" 블록만 수정하면 된다.
+
+   원본 위치
+     - theme/vict/css/mobile/main.css  : "Main Visual" ~ ico_Move keyframes
+     - theme/vict/css/mobile/media.css : 1600 / 1024 / 640 / 480 구간의 .mv_sec, .mv_scroll 규칙
+   ========================================================================== */
+
+/* Main Visual ------------------------------------------------------------ */
+.mv_sec{overflow: hidden; position: relative;width: 100%; height: calc(100vh - var(--vt-header-h)); margin-top: var(--vt-header-h); z-index: 106;}
+.mv_sec .item{width: 100%; position: relative; overflow: hidden; height: calc(100vh - var(--vt-header-h));}
+.mv_sec .item .mv_img{position: absolute; left: 0; top: 0; width: 100%; height: 100%; transition:6s; overflow: hidden !important; z-index: -1; transform:scale(1.2); background: url(../images/hero/hero-01.jpg) center no-repeat; background-size: cover !important;}
+.mv_sec .mv02 .mv_img{background: url(../images/hero/hero-02.jpg) center no-repeat; background-size: cover;}
+.mv_sec .mv03 .mv_img{background: url(../images/hero/hero-03.jpg) center no-repeat; background-size: cover;}
+.mv_sec .active .item .mv_img{transform:scale(1) rotate(.001deg); }
+.mv_sec .item text_wrap{position: relative; display: flex;  height: 100%; z-index: 100; box-sizing: border-box; }
+.mv_sec .item text_wrap text_box{width: 100%; margin-top: 216px;}
+.mv_sec .item text_wrap text_box h3{line-height: 80px; color: var(--vt-white); letter-spacing: -0.03em !Important; font-weight: 600; margin-bottom: 14px; margin-left: -3px;  text-shadow:5px 5px 5px rgba(0,0,0,0.1); position: relative; top: 50px;  opacity: 0; transition:.6s .3s; }
+.mv_sec .item text_wrap text_box p{line-height: 32px; font-weight: 400; color: var(--vt-white); text-shadow:5px 5px 5px rgba(0,0,0,0.1); letter-spacing: -0.03em; position: relative; top: 50px;  opacity: 0; transition:.6s .6s; }
+.mv_sec .active .item text_wrap text_box *{top: 0; opacity: 1; }
+
+/* 재생/정지 토글 */
+.mv_sec .owl_b{position: absolute; left: 50%; bottom: 341px; margin-left: -750px; z-index: 1005; transform:translate(154px, 0)}
+.mv_sec .owl_b > *{position: relative; display: block; width: 7px; height: 10px; background: url(../images/hero/mv_play.png) center no-repeat; cursor: pointer;}
+.mv_sec .owl_b > *.on{opacity: 0; z-index: -100;}
+.mv_sec .owl_b > .mv_stop{background: url(../images/hero/mv_stop.png) center no-repeat; margin-top: -9px;}
+
+/* owl-nav (이전/다음) */
+.mv_sec .owl-nav{width: 209px; position: absolute; left: 50%; margin-left: -750px; bottom: 355px; z-index: 1005;}
+.mv_sec .owl-nav > *{width: 10px; height: 17px; background: url(../images/hero/mv_prev.png) center no-repeat; position: absolute; left: 0; top: 0; transition:.3s;}
+.mv_sec .owl-nav > * > span{display: none;}
+.mv_sec .owl-nav > .owl-next{background: url(../images/hero/mv_next.png) center no-repeat; left: auto; right: 0;}
+.mv_sec .owl-nav > .owl-prev:hover{left: -3px;}
+.mv_sec .owl-nav > .owl-next:hover{right: -3px;}
+
+/* owl-dot (페이지 표시) */
+.mv_sec .owl-dots{position: absolute; left: 50%; margin-left: -750px;  bottom: 335px; z-index: 1005; transform:translate(42px, 0)}
+.mv_sec .owl-dots .owl-dot{background: none;  }
+.mv_sec .owl-dots .owl-dot span{position: relative; display: block; width: 7px; height: 7px; box-sizing: border-box; background: var(--vt-white); border-radius: 50%; transition:.3s; margin-right: 22px;}
+.mv_sec .owl-dots .owl-dot.active span{width: 35px; height: 10px; border-radius: 50px; background: var(--vt-blue-700); margin-right: 16px;}
+
+/* mv_scroll (SCROLL 아이콘) */
+.mv_scroll{position: absolute; left: 50%; bottom: 40px; margin-left: -28px;  z-index: 100; animation: 3s ease 0s infinite normal none running; animation-name:ico_Move; text-align: center;}
+.mv_scroll a{font-size: 14px; line-height: 1; color: var(--vt-white); font-weight: 900; letter-spacing: -0.03em; transition:.3s; }
+@keyframes ico_Move {0% {bottom: 40px; } 60% {bottom: 60px;} 100% {bottom: 40px;} }
+
+
+/* Responsive ------------------------------------------------------------- */
+@media (max-width:1600px){
+	.mv_sec .item text_wrap{width: 100%;}
+	.mv_sec .item text_wrap text_box{padding-left: var(--vt-gutter); box-sizing: border-box;}
+	.mv_sec .owl-nav{left: 20px; margin-left: 0; }
+	.mv_sec .owl-dots{left: 15px; margin-left: 0;}
+	.mv_sec .owl_b{left: 20px; margin-left: 0;}
+}
+
+@media (max-width:1024px){
+	.mv_sec,
+	.mv_sec .item{height: 80vw;}
+	.mv_sec .item text_wrap text_box{margin-top: 15vw;}
+	.mv_sec .owl-nav{bottom: 100px;}
+	.mv_sec .owl-dots{bottom: 80px;}
+	.mv_sec .owl_b{bottom: 88px;}
+	.mv_sec .item text_wrap text_box h3{font-size: 45px; line-height: 1.5;}
+	.mv_sec .item text_wrap text_box p{line-height: 1.5;}
+}
+
+@media (max-width:640px){
+	.mv_sec .item text_wrap text_box h3{font-size: 35px; }
+	.mv_sec .item text_wrap text_box p{font-size: 14px; word-break: keep-all;}
+	.mv_sec .item text_wrap text_box p br{display: none;}
+	.mv_scroll{width: 40px; margin-left: -20px;}
+	@keyframes ico_Move {0% {bottom: 10px; } 60% {bottom: 20px;} 100% {bottom: 10px;} }
+}
+
+@media (max-width:480px){
+	.mv_sec{margin-top: var(--vt-header-h-sm);}
+	.mv_sec .item text_wrap text_box h3{font-size: 5vw; }
+}

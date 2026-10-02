@@ -1,0 +1,37 @@
+@charset "utf-8";
+/* ==========================================================================
+   VICTEX Renewal - Design Tokens
+   현행 사이트(original/)의 CSS 에서 추출한 값. 리뉴얼 시 이 파일의 값을
+   우선 조정하고, 새로 작성하는 컴포넌트(hero 등)는 이 변수를 사용한다.
+   ========================================================================== */
+:root {
+	/* Brand color ------------------------------------------------------- */
+	--vt-blue-700: #014099;     /* 메인 브랜드 블루 (버튼, 활성 dot, 포인트 텍스트) */
+	--vt-blue-500: #115dc7;     /* 강조 텍스트 (납품처 문구 하이라이트) */
+	--vt-red-500:  #e8180c;     /* 로고 레드 / Contact 퀵버튼 계열 */
+	--vt-navy-900: #020f26;     /* PRODUCT 섹션 배경 톤(이미지) 근사값 */
+
+	/* Neutral ----------------------------------------------------------- */
+	--vt-white:    #fff;
+	--vt-black:    #000;
+	--vt-gray-900: #333;        /* 제목 텍스트 */
+	--vt-gray-600: #666;        /* 본문 텍스트 */
+	--vt-gray-300: #ddd;        /* 보더 */
+	--vt-gray-100: #f7f7f7;     /* 밝은 배경 */
+
+	/* Typography -------------------------------------------------------- */
+	--vt-font-base: 'Noto Sans KR', 'Noto Sans Korean', 'Malgun Gothic', '맑은 고딕', sans-serif;
+	--vt-font-en:   'Montserrat', sans-serif;   /* GNB 메뉴 */
+	--vt-font-point:'Play', sans-serif;         /* 섹션 라벨, view more */
+	--vt-letter-spacing: -0.03em;
+
+	/* Layout ------------------------------------------------------------ */
+	--vt-container-wide: 1600px;   /* .ct1 (header, footer) */
+	--vt-container:      1500px;   /* .ct2 (본문) */
+	--vt-header-h:       100px;
+	--vt-header-h-sm:    80px;     /* ≤480px */
+	--vt-gutter:         20px;     /* ≤1600px 좌우 여백 */
+
+	/* Breakpoints (참고용 - CSS 변수는 media query 에서 사용 불가)
+	   2000 / 1600 / 1500 / 1300 / 1024 / 640 / 480, 그리고 max-height:940 */
+}

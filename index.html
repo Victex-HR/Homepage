@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VICTEX 리뉴얼 작업공간</title>
+<style>
+	:root { --blue: #014099; --text: #333; --muted: #666; --line: #ddd; --bg: #f7f7f7; --card: #fff; }
+	@media (prefers-color-scheme: dark) {
+		:root:not([data-theme="light"]) { --text: #eee; --muted: #aaa; --line: #333; --bg: #111; --card: #1b1b1b; --blue: #4d8fff; }
+	}
+	* { box-sizing: border-box; }
+	body { margin: 0; padding: 48px 16px; background: var(--bg); color: var(--text);
+		font-family: 'Noto Sans KR', 'Malgun Gothic', system-ui, sans-serif; line-height: 1.6; }
+	main { max-width: 880px; margin: 0 auto; }
+	h1 { margin: 0 0 4px; font-size: 28px; letter-spacing: -0.02em; }
+	p.lead { margin: 0 0 32px; color: var(--muted); }
+	.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+	a.card { display: block; padding: 24px; background: var(--card); border: 1px solid var(--line);
+		border-radius: 12px; color: inherit; text-decoration: none; transition: border-color .2s; }
+	a.card:hover, a.card:focus-visible { border-color: var(--blue); }
+	a.card strong { display: block; font-size: 18px; color: var(--blue); margin-bottom: 6px; }
+	a.card span { color: var(--muted); font-size: 14px; }
+	h2 { font-size: 16px; margin: 40px 0 12px; }
+	ul { margin: 0; padding-left: 20px; color: var(--muted); font-size: 14px; }
+	code { font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+	<h1>VICTEX 홈페이지 리뉴얼</h1>
+	<p class="lead">현행 사이트 복제본과 리뉴얼 작업본을 비교해 보는 화면입니다.</p>
+
+	<div class="grid">
+		<a class="card" href="original/index.html">
+			<strong>Original</strong>
+			<span>현행 사이트 복제본 (www.victex.co.kr, 2026-10-02 기준)</span>
+		</a>
+		<a class="card" href="renewal/index.html">
+			<strong>Renewal</strong>
+			<span>리뉴얼 작업본 · 히어로를 분리해 둔 상태</span>
+		</a>
+	</div>
+
+	<h2>문서</h2>
+	<ul>
+		<li><code>docs/01-site-analysis.md</code> — 현행 사이트 구조 분석</li>
+		<li><code>docs/02-hero-renewal-brief.md</code> — 히어로 리뉴얼 준비 브리프</li>
+	</ul>
+</main>
+</body>
+</html>
