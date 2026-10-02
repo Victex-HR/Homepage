@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * original/ 과 renewal/ 메인 페이지를 같은 해상도로 캡처해 screenshots/ 에 저장한다.
+ * original/ 과 리뉴얼 작업본(Renewal_1/, Renewal_2/) 메인 페이지를 같은 해상도로 캡처해 screenshots/ 에 저장한다.
  * 히어로 리뉴얼 전·후 비교, 그리고 히어로 외 섹션이 바뀌지 않았는지 확인하는 용도.
  *
  *   npm run shots                 # 기본 4개 해상도, 히어로 화면
@@ -17,6 +17,7 @@ const ROOT = path.resolve(__dirname, '..');
 const OUT = path.join(ROOT, 'screenshots');
 const VIEWPORTS = [[1920, 1080], [1366, 768], [800, 1000], [390, 844]];
 const SECTIONS = ['MAIN', 'MCNT1', 'MCNT2', 'MCNT3', 'MCNT4', 'MCNT5', 'FOOTER'];
+const SITES = ['original', 'Renewal_1', 'Renewal_2'];
 const withSections = process.argv.includes('--sections');
 
 const MIME = {
@@ -47,7 +48,7 @@ function serve() {
   const browser = await chromium.launch();
 
   for (const [w, h] of VIEWPORTS) {
-    for (const site of ['original', 'renewal']) {
+    for (const site of SITES) {
       const page = await browser.newPage({ viewport: { width: w, height: h } });
       await page.goto(`${base}/${site}/index.html`, { waitUntil: 'networkidle', timeout: 60000 }).catch(() => {});
       // 전환 애니메이션을 끄고 최종 상태로 캡처

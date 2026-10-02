@@ -105,7 +105,7 @@ fullPage.js 섹션 7개로 이루어져 있습니다. 섹션마다 `data-anchor`
 
 ## 5. 디자인 시스템(현행 값)
 
-> 리뉴얼 작업용 변수로 `renewal/assets/css/tokens.css`에 정리해 두었습니다.
+> 리뉴얼 작업용 변수로 `Renewal_1/assets/css/tokens.css`(Renewal_2도 동일)에 정리해 두었습니다.
 
 **컬러**
 | 용도 | 값 |

@@ -1,0 +1,191 @@
+@charset "utf-8";
+/* ==========================================================================
+   VICTEX Renewal_2 - HERO (Main Visual)  ·  2-1안 "EPC 환경/엔지니어링 전문기업 이미지 Main"
+   --------------------------------------------------------------------------
+   디자인 중점 : 기존 화면 구성(헤더 + 전면 이미지 + 좌측 카피)을 유지하고
+                 카피만 재구성, 깔끔한 이미지
+     ① 우측  플랜트 사진 (왼쪽으로 하늘빛 배경에 페이드)
+     ② 사진 위를 가로지르는 흰 곡선
+     ③ 좌측  VICTEX 로고 + "환경 에너지 산업의 미래를 여는 기술 전문기업"
+             + 사업 2개(CCUS / 원전해체) 목록
+   데스크톱(≥1024px)은 fullPage.js 1번 섹션(화면 높이 고정),
+   1024px 미만은 fullPage 반응형 모드(일반 스크롤)라 세로로 쌓는다.
+   ========================================================================== */
+
+.hero {
+	--hero-gutter: max(var(--vt-gutter), (100% - var(--vt-container-wide)) / 2);
+	--hero-ease: cubic-bezier(.22, .61, .36, 1);
+
+	position: relative;
+	display: flex;
+	align-items: center;
+	height: calc(100vh - var(--vt-header-h));
+	margin-top: var(--vt-header-h);
+	overflow: hidden;
+	isolation: isolate;
+	background:
+		radial-gradient(70% 90% at 0% 0%, #d7e5f5 0%, rgba(215, 229, 245, 0) 60%),
+		linear-gradient(105deg, #eef4fb 0%, #f8fbfe 34%, #ffffff 52%, #eaf2fb 100%);
+	font-family: var(--vt-font-base);
+	letter-spacing: var(--vt-letter-spacing);
+	color: var(--vt-navy-800);
+}
+/* legacy `.main_wrap article:not(.mv_sec){padding-top}` 무효화 */
+.main_wrap article.hero { padding-top: 0; }
+
+/* 우측 사진 --------------------------------------------------------------- */
+.hero__visual {
+	position: absolute;
+	z-index: 0;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	width: 68%;
+	margin: 0;
+	-webkit-mask-image: linear-gradient(to right, transparent 0, rgba(0, 0, 0, .55) 16%, #000 36%);
+	        mask-image: linear-gradient(to right, transparent 0, rgba(0, 0, 0, .55) 16%, #000 36%);
+}
+.hero__visual picture,
+.hero__visual img { display: block; width: 100%; height: 100%; }
+.hero__visual img { object-fit: cover; object-position: 58% 40%; filter: saturate(1.05) contrast(1.03); }
+.hero__visual::after { /* 하늘빛 톤 + 위쪽 밝게 */
+	content: ""; position: absolute; inset: 0;
+	background:
+		linear-gradient(180deg, rgba(234, 242, 251, .55) 0%, rgba(234, 242, 251, 0) 38%),
+		linear-gradient(90deg, rgba(40, 100, 190, .18) 0%, rgba(40, 100, 190, 0) 60%);
+}
+
+.hero__swoosh { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; pointer-events: none; }
+
+/* 좌측 카피 --------------------------------------------------------------- */
+.hero__inner {
+	position: relative;
+	z-index: 2;
+	display: flex;
+	flex-direction: column;
+	gap: clamp(26px, 5vh, 58px);
+	width: 100%;
+	padding: 0 var(--hero-gutter) clamp(20px, 6vh, 80px);
+}
+.hero__title { display: flex; flex-direction: column; gap: clamp(18px, 3vh, 34px); margin: 0; font-weight: 700; }
+.hero__logo img { display: block; width: clamp(200px, 17.5vw, 336px); height: auto; }
+.hero__copy {
+	font-size: clamp(26px, 2.05vw, 40px);
+	line-height: 1.45;
+	color: #1c3a72;
+	word-break: keep-all;
+}
+
+/* 사업 목록 : 점선 위 두 개의 점 */
+.hero__biz {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	gap: clamp(18px, 4vh, 44px);
+	margin: 0;
+	padding: 0 0 0 clamp(30px, 2.1vw, 40px);
+	list-style: none;
+}
+.hero__biz::before {
+	content: ""; position: absolute;
+	left: 4px; top: .9em; bottom: .9em;
+	border-left: 2px dotted rgba(28, 58, 114, .45);
+	font-size: clamp(17px, 1.3vw, 25px);
+}
+.hero__biz li { position: relative; }
+.hero__biz li::before {
+	content: ""; position: absolute;
+	left: calc(-1 * clamp(30px, 2.1vw, 40px));
+	top: 50%;
+	width: 10px; height: 10px;
+	margin-top: -5px;
+	border-radius: 50%;
+	background: #1c3a72;
+}
+.hero__biz a {
+	display: inline-flex;
+	align-items: center;
+	gap: 14px;
+	padding: 4px 0;
+	font-size: clamp(17px, 1.3vw, 25px);
+	line-height: 1.4;
+	font-weight: 600;
+	color: #222d42;
+	text-decoration: none;
+	transition: color .3s;
+}
+.hero__biz strong { font-weight: 800; color: var(--vt-navy-800); }
+.hero__biz svg {
+	width: 22px; height: 22px; flex: none;
+	fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+	opacity: 0; transform: translateX(-8px);
+	transition: opacity .3s, transform .3s var(--hero-ease);
+}
+.hero__biz a:hover,
+.hero__biz a:focus-visible { color: var(--vt-blue-600); }
+.hero__biz a:hover strong,
+.hero__biz a:focus-visible strong { color: inherit; }
+.hero__biz a:hover svg,
+.hero__biz a:focus-visible svg { opacity: 1; transform: none; }
+.hero__biz a:focus-visible { outline: 2px solid var(--vt-blue-400); outline-offset: 4px; border-radius: 4px; }
+
+/* 첫 화면에서는 '맨 위로' 버튼이 의미 없으므로 숨긴다 */
+body.fp-viewing-MAIN .top_bt { opacity: 0; visibility: hidden; }
+
+/* fullPage 우측 내비 점 : 밝은 하늘·회색 설비 사진 위에서도 보이도록 */
+body.fp-viewing-MAIN #fp-nav ul li a span { background: rgba(20, 40, 75, .35); box-shadow: 0 0 0 1px rgba(255, 255, 255, .7); }
+body.fp-viewing-MAIN #fp-nav ul li a.active span { background: var(--vt-blue-700); }
+
+/* 첫 화면 등장 효과 --------------------------------------------------------- */
+@keyframes hero-rise { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
+@keyframes hero-zoom { from { opacity: 0; transform: scale(1.06); } to { opacity: 1; transform: none; } }
+@keyframes hero-fade { from { opacity: 0; } to { opacity: 1; } }
+
+@media (prefers-reduced-motion: no-preference) {
+	.hero__visual img { animation: hero-zoom 1.8s var(--hero-ease) both; }
+	.hero__swoosh { animation: hero-fade 1.6s .3s both; }
+	.hero__logo { animation: hero-rise .9s .15s var(--hero-ease) both; }
+	.hero__copy { animation: hero-rise .9s .35s var(--hero-ease) both; }
+	.hero__biz li:nth-child(1) { animation: hero-rise .9s .55s var(--hero-ease) both; }
+	.hero__biz li:nth-child(2) { animation: hero-rise .9s .7s var(--hero-ease) both; }
+	.hero__biz::before { animation: hero-fade 1s .6s both; }
+}
+
+/* Responsive -------------------------------------------------------------- */
+@media (max-width: 1300px) {
+	.hero__visual { width: 72%; }
+}
+
+/* 1024px 미만 : fullPage 반응형 모드(일반 스크롤) — 카피 → 사진 순으로 쌓기 */
+@media (max-width: 1023.98px) {
+	.hero {
+		flex-direction: column;
+		align-items: stretch;
+		height: auto;
+	}
+	.hero__inner { order: 1; padding: clamp(44px, 8vw, 72px) var(--vt-gutter) 0; gap: 26px; }
+	.hero__logo img { width: clamp(160px, 30vw, 260px); }
+	.hero__copy { font-size: clamp(21px, 4.4vw, 34px); }
+	.hero__biz a { font-size: clamp(16px, 2.6vw, 21px); }
+	.hero__biz::before { font-size: clamp(16px, 2.6vw, 21px); }
+	.hero__visual {
+		order: 2;
+		position: relative;
+		inset: auto;
+		width: 100%;
+		height: clamp(260px, 62vw, 560px);
+		margin-top: -2vw;
+		-webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 28%);
+		        mask-image: linear-gradient(to bottom, transparent 0, #000 28%);
+	}
+	.hero__visual img { object-position: 55% 45%; }
+	.hero__swoosh { top: auto; height: 62vw; bottom: 0; }
+}
+
+@media (max-width: 374px) {
+	.hero__copy { font-size: 19px; }
+}
+
+@media (max-width: 480px) {
+	.hero { margin-top: var(--vt-header-h-sm); }
+}
