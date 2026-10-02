@@ -15,14 +15,15 @@
 │   ├── index.html   메인 — 히어로 영역은 "HERO : START ~ END" 주석으로 구분
 │   ├── assets/      ★ 리뉴얼 레이어
 │   │   ├── css/tokens.css   디자인 변수 (현행 값 추출)
-│   │   ├── css/hero.css     히어로 스타일 (legacy CSS에서 분리)
-│   │   ├── js/hero.js       히어로 스크립트 (인라인 스크립트에서 분리)
+│   │   ├── css/hero.css     히어로 스타일 (1-1안)
+│   │   ├── js/hero.js       히어로 스크립트 (소개 영상 레이어)
 │   │   └── images/hero/     히어로 이미지
 │   └── css/ js/ fonts/ theme/   legacy 에셋 (히어로 규칙은 제거됨)
 │
 ├── docs/
 │   ├── 01-site-analysis.md       현행 사이트 구조·기술·문제점 분석
-│   └── 02-hero-renewal-brief.md  히어로 현행 사양, 결정 필요 항목, 체크리스트
+│   ├── 02-hero-renewal-brief.md  리뉴얼 전 히어로 사양, 결정 필요 항목, 체크리스트
+│   └── 03-hero-1-1.md            히어로 1-1안 적용 내용, 오픈 전 확인 항목
 │
 └── tools/
     ├── mirror.py        현행 사이트 → original/ 복제 스크립트
@@ -51,4 +52,5 @@ Node가 없다면 `python3 -m http.server 8080`으로도 열 수 있습니다.
 - [x] 현행 사이트 복제 (`original/`, 페이지 41개, 원본과 같은 화면 확인)
 - [x] 리뉴얼 작업본 생성 (`renewal/`, 원본과 픽셀 단위로 동일)
 - [x] 히어로 리뉴얼 준비 — 코드 분리 + 브리프 → [docs/02-hero-renewal-brief.md](docs/02-hero-renewal-brief.md)
-- [ ] 히어로 리뉴얼 (브리프 §3의 결정 항목 확정 후 착수)
+- [x] 히어로 리뉴얼 — 1-1안(2부문 사업 메인 · 화이트 블루) 적용 → [docs/03-hero-1-1.md](docs/03-hero-1-1.md)
+- [ ] 히어로 오픈 전 확인 (고해상도 사진, 지표 수치, 소개 영상) — 03 문서 §4

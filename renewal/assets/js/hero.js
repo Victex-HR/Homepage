@@ -1,49 +1,64 @@
 /* ==========================================================================
-   VICTEX Renewal - HERO (Main Visual) script
+   VICTEX Renewal - HERO (Main Visual) script  ·  1-1안
    --------------------------------------------------------------------------
-   index.html 하단 인라인 스크립트에 있던 히어로 관련 로직을 분리한 파일.
-   동작은 원본과 동일하다.
-     - Owl Carousel 2 페이드 슬라이드 (3장, loop, dots + prev/next)
-     - 재생/정지 토글 (.mv_play / .mv_stop)
-     - SCROLL 아이콘 클릭 시 fullPage.js 2번째 섹션으로 이동
-   의존성: jQuery 1.11, owl.carousel.min.js, fullpage.js (index.html 에서 로드)
+   - "빅텍스 소개 영상 재생하기" 버튼 → <dialog> 레이어에 YouTube 영상 재생
+     · 열려 있는 동안 fullPage.js 휠/키보드 섹션 이동을 멈춘다
+     · Esc / 닫기 버튼 / 바깥 영역 클릭으로 닫고, 닫으면 영상도 멈춘다
+   - 영상 ID 는 버튼의 data-hero-video 속성에서 읽는다 (교체 시 그 값만 변경)
+   의존성 없음. fullPage.js 가 있으면 함께 제어한다.
    ========================================================================== */
-(function ($) {
+(function () {
 	'use strict';
 
-	var HERO_AUTOPLAY_TIMEOUT = 8000;
+	var trigger = document.querySelector('.hero [data-hero-video]');
+	var dialog = document.querySelector('.hero-modal');
+	if (!trigger || !dialog) return;
 
-	$(function () {
-		var $hero = $('.mv_sec');
-		if (!$hero.length) return;
+	var frame = dialog.querySelector('.hero-modal__frame');
+	var closeBtn = dialog.querySelector('.hero-modal__close');
+	var supportsDialog = typeof dialog.showModal === 'function';
 
-		var Mv_owl = $hero.find('.mv_owl').owlCarousel({
-			animateOut : 'fadeOut',
-			animateIn : 'fadeIn',
-			items : 1,
-			loop : true,
-			margin : 0,
-			autoplay : false,
-			autoplayTimeout : HERO_AUTOPLAY_TIMEOUT,
-			dots : true,
-			nav : true
-		});
+	function fullpage(method, value) {
+		var api = window.fullpage_api || (window.jQuery && window.jQuery.fn.fullpage);
+		if (api && typeof api[method] === 'function') api[method](value);
+	}
 
-		// 재생/정지 토글: .on 이 붙은 버튼은 숨김 처리됨 (hero.css 참고)
-		$hero.find('.mv_play').on('click', function () {
-			Mv_owl.trigger('play.owl.autoplay', [HERO_AUTOPLAY_TIMEOUT]);
-			$(this).addClass('on');
-			$hero.find('.mv_stop').removeClass('on');
-		});
-		$hero.find('.mv_stop').on('click', function () {
-			Mv_owl.trigger('stop.owl.autoplay');
-			$(this).addClass('on');
-			$hero.find('.mv_play').removeClass('on');
-		});
+	function lockPage(locked) {
+		fullpage('setAllowScrolling', !locked);
+		fullpage('setKeyboardScrolling', !locked);
+		document.documentElement.classList.toggle('hero-modal-open', locked);
+	}
 
-		// SCROLL 아이콘 → 다음 섹션
-		$hero.find('.mv_scroll').on('click', function () {
-			if ($.fn.fullpage && $.fn.fullpage.moveTo) $.fn.fullpage.moveTo(2);
+	function open() {
+		var id = encodeURIComponent(trigger.getAttribute('data-hero-video'));
+		frame.innerHTML = '<iframe src="https://www.youtube-nocookie.com/embed/' + id +
+			'?autoplay=1&rel=0&playsinline=1" title="빅텍스 소개 영상" ' +
+			'allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>';
+		if (supportsDialog) dialog.showModal();
+		else dialog.setAttribute('open', '');
+		lockPage(true);
+		closeBtn.focus();
+	}
+
+	function close() {
+		if (supportsDialog) dialog.close();
+		else { dialog.removeAttribute('open'); onClosed(); }
+	}
+
+	function onClosed() {
+		frame.innerHTML = ''; // 재생 중지
+		lockPage(false);
+		trigger.focus();
+	}
+
+	trigger.addEventListener('click', open);
+	closeBtn.addEventListener('click', close);
+	dialog.addEventListener('close', onClosed);
+	// 바깥(backdrop) 클릭 시 닫기 — 영상 영역 클릭은 iframe 이 받으므로 dialog 자체가 target 일 때만
+	dialog.addEventListener('click', function (e) { if (e.target === dialog) close(); });
+	if (!supportsDialog) {
+		document.addEventListener('keydown', function (e) {
+			if (e.key === 'Escape' && dialog.hasAttribute('open')) close();
 		});
-	});
-})(jQuery);
+	}
+})();

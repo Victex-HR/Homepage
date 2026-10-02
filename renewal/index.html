@@ -41,6 +41,7 @@
 <!-- [RENEWAL] 리뉴얼 레이어 : legacy CSS 다음에 로드 -->
 <link rel="stylesheet" href="assets/css/tokens.css">
 <link rel="stylesheet" href="assets/css/hero.css">
+<link rel="preload" as="image" href="assets/images/hero/hero-ccus-plant.webp" type="image/webp" fetchpriority="high">
 
 <!-- 네이버 메타태그 -->
 <!-- <meta name="naver-site-verification" content="c9840556d1ac1815592e2f4b26240f9fc4b83a41" /> -->
@@ -172,7 +173,7 @@ $(window).load(function(){
 <div class="header ">
 	<div class="dep2_bg"></div>
 	<div class="hd_sub ct1">
-		<h1 class="hd_logo"><a href="index.html"></a></h1>
+		<div class="hd_logo"><a href="index.html" aria-label="빅텍스 홈"></a></div>
 		<nav class="hd_nav">
 			<ul class="gnb fz18"  id="clone_gnb">
 				<li class=""><a href="../original/s1/s1_3.html"><span>CCUS/블루수소</span></a>
@@ -698,48 +699,122 @@ $(window).resize(function(){//사이즈 리사이징 시
 <section id="" class="main_wrap">
 	<div id="fullpage">
 		<!-- ===================== HERO : START (renewal/assets/css/hero.css, assets/js/hero.js) ===================== -->
+		<!-- 1-1안 : VICTEX 2부문 사업 메인 (화이트 블루) — 회사 소개(타이틀) + CCUS / 원전해체 2개 부문 -->
 		<div class="section section1 fp-auto-height-responsive fp-auto-heigh" data-anchor="MAIN">
-			<article class="mv_sec">
-				<div class="owl-carousel mv_owl">
-					<div class="item mv01">
-						<div class="mv_img"></div>
-						<text_wrap class="ct2">
-							<text_box>
-								<h3 class="fz60">(주)빅텍스 <br>드라이아이스 너겟 제조기</h3>
-								<p class="fz20">C사, K사, E사 등 국내 3대 온라인 식품 배송업체 모두 우수한 품질이 입증된 <br>
-								(주)빅텍스의 드라이아이스 너겟제조기를 도입하여 사용하고 있습니다.</p>
-							</text_box>
-						</text_wrap>
-					</div>
-					<div class="item mv02">
-						<div class="mv_img"></div>
-						<text_wrap class=" ct2">
-							<text_box>
-								<h3 class="fz60">(주)빅텍스 <br>CO₂ Revert Recovery System</h3>
-								<p class="fz20">드라이아이스 제조공정에서 버려지는 CO₂를 포집하여 원료로 재사용함으로써 <br>드라이아이스 생산성을 극대화할 수 있습니다.</p>
-							</text_box>
-						</text_wrap>
-					</div>
+			<article class="hero" aria-labelledby="hero-title">
+				<svg class="hero-sprite" aria-hidden="true" focusable="false">
+					<symbol id="hero-i-leaf" viewBox="0 0 32 32"><path d="M16 26V15"/><path d="M16 17c-5.5 0-8.5-3.5-8.5-9 5.5 0 8.5 3.5 8.5 9Z"/><path d="M16 20c0-5.5 3.2-8.6 8.5-8.6 0 5.4-3 8.6-8.5 8.6Z"/><path d="M8 26h16"/></symbol>
+					<symbol id="hero-i-atom" viewBox="0 0 32 32"><circle cx="16" cy="16" r="2"/><ellipse cx="16" cy="16" rx="12" ry="4.6"/><ellipse cx="16" cy="16" rx="12" ry="4.6" transform="rotate(60 16 16)"/><ellipse cx="16" cy="16" rx="12" ry="4.6" transform="rotate(120 16 16)"/></symbol>
+					<symbol id="hero-i-award" viewBox="0 0 32 32"><circle cx="16" cy="12.5" r="7.5"/><path d="m16 8.6 1.2 2.4 2.6.4-1.9 1.8.5 2.6-2.4-1.3-2.4 1.3.5-2.6-1.9-1.8 2.6-.4Z"/><path d="m11.2 18.3-2.7 8.2 3.9-1 2.4 3.1 1.2-6.6"/><path d="m20.8 18.3 2.7 8.2-3.9-1-2.4 3.1-1.2-6.6"/></symbol>
+					<symbol id="hero-i-people" viewBox="0 0 32 32"><circle cx="16" cy="10.5" r="3.6"/><path d="M9.5 24.5c0-4 2.9-7.2 6.5-7.2s6.5 3.2 6.5 7.2"/><circle cx="7.5" cy="13" r="2.6"/><path d="M3 23.5c0-3 1.9-5.4 4.5-5.4 1 0 1.9.3 2.6.9"/><circle cx="24.5" cy="13" r="2.6"/><path d="M29 23.5c0-3-1.9-5.4-4.5-5.4-1 0-1.9.3-2.6.9"/></symbol>
+					<symbol id="hero-i-growth" viewBox="0 0 32 32"><path d="M4 27h24"/><path d="M7 27v-6h4v6"/><path d="M14 27v-9h4v9"/><path d="M21 27V14h4v13"/><path d="m5 15 6.5-5.5 4.5 3.5L26 5"/><path d="M21 5h5v5"/></symbol>
+					<symbol id="hero-i-gear" viewBox="0 0 32 32"><circle cx="16" cy="16" r="4"/><path d="M16 4.5v3M16 24.5v3M27.5 16h-3M7.5 16h-3M24.1 7.9l-2.1 2.1M10 22l-2.1 2.1M24.1 24.1 22 22M10 10 7.9 7.9"/><circle cx="16" cy="16" r="8.5"/></symbol>
+					<symbol id="hero-i-globe" viewBox="0 0 32 32"><circle cx="16" cy="16" r="11.5"/><path d="M4.5 16h23"/><path d="M16 4.5c3.2 3.2 4.8 7 4.8 11.5S19.2 24.3 16 27.5c-3.2-3.2-4.8-7-4.8-11.5S12.8 7.7 16 4.5Z"/><path d="M6.5 9.5h19M6.5 22.5h19"/></symbol>
+					<symbol id="hero-i-play" viewBox="0 0 32 32"><path d="M12.5 10.5v11l9-5.5Z"/></symbol>
+					<symbol id="hero-i-arrow" viewBox="0 0 24 24"><path d="M3 12h17"/><path d="m14 6 6 6-6 6"/></symbol>
+				</svg>
 
-					<div class="item mv03">
-						<div class="mv_img"></div>
-						<text_wrap class=" ct2">
-							<text_box>
-								<h3 class="fz60">(주)빅텍스 CCU 솔루션 <br>Carbon Capture and Utilization</h3>
-								<p class="fz20">(주)빅텍스는 이산화탄소(CO₂)를 배출단계에서 포집, 액화하여 <br>재사용하는 CCU 플랜트에 대한 토털 엔지니어링 솔루션을 제공합니다.</p>
-							</text_box>
-						</text_wrap>
-					</div>
+				<!-- 배경 : 화이트 블루 그라데이션 + 웨이브 라인 -->
+				<div class="hero__bg" aria-hidden="true">
+					<svg class="hero__waves" viewBox="0 0 1600 900" preserveAspectRatio="none" focusable="false">
+						<defs>
+							<linearGradient id="hero-wave-a" x1="0" y1="0" x2="1" y2="0">
+								<stop offset="0" stop-color="#7fa9dc" stop-opacity="0"/>
+								<stop offset=".35" stop-color="#7fa9dc" stop-opacity=".55"/>
+								<stop offset=".75" stop-color="#9bbde6" stop-opacity=".35"/>
+								<stop offset="1" stop-color="#9bbde6" stop-opacity="0"/>
+							</linearGradient>
+							<linearGradient id="hero-wave-b" x1="0" y1="0" x2="1" y2="0">
+								<stop offset="0" stop-color="#ffffff" stop-opacity="0"/>
+								<stop offset=".4" stop-color="#ffffff" stop-opacity=".85"/>
+								<stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+							</linearGradient>
+						</defs>
+						<path class="hero__ribbon" d="M-40 760C220 690 360 560 560 600S900 840 1180 700 1500 420 1660 470V560C1500 520 1340 720 1160 800S760 740 560 690 200 820-40 860Z" fill="url(#hero-wave-b)"/>
+						<g fill="none" stroke="url(#hero-wave-a)" stroke-width="1.2">
+							<path d="M-40 700C200 650 380 520 600 560S940 800 1200 660 1520 380 1660 420"/>
+							<path d="M-40 716C210 664 390 540 604 578S944 812 1204 676 1520 400 1660 440"/>
+							<path d="M-40 732C220 678 400 560 608 596S948 824 1208 692 1520 420 1660 460"/>
+							<path d="M-40 748C230 692 410 580 612 614S952 836 1212 708 1520 440 1660 480"/>
+							<path d="M-40 764C240 706 420 600 616 632S956 848 1216 724 1520 460 1660 500"/>
+							<path d="M-40 780C250 720 430 620 620 650S960 860 1220 740 1520 480 1660 520"/>
+							<path d="M-40 260C260 200 420 340 640 300S980 120 1240 200 1520 300 1660 260"/>
+							<path d="M-40 276C266 214 430 356 646 316S986 136 1246 216 1520 316 1660 276"/>
+						</g>
+					</svg>
 				</div>
 
-				<div class="owl_b">
-					<span class="mv_play on"></span>
-					<span class="mv_stop"></span>
+				<!-- 중앙 메인 사진 : CCU 플랜트 현장 -->
+				<figure class="hero__visual">
+					<picture>
+						<source srcset="assets/images/hero/hero-ccus-plant.webp" type="image/webp">
+						<img src="assets/images/hero/hero-ccus-plant.jpg" width="806" height="593" alt="빅텍스가 구축한 열병합발전소 CCU 플랜트 - 액화탄산 저장탱크와 포집 설비" fetchpriority="high" decoding="async">
+					</picture>
+				</figure>
+
+				<!-- 좌측 : 회사 소개 타이틀 -->
+				<div class="hero__inner">
+					<div class="hero__copy">
+						<h1 id="hero-title" class="hero__title"><em>탄소중립</em>과 <em>원자력산업</em>의<br> 지속가능한 미래</h1>
+						<p class="hero__lead">빅텍스는 CCUS를 통한 탄소중립 통합 솔루션과<br> 원전해체 / 원자력산업 솔루션으로<br> 안전하고 지속가능한 미래를 만들어 갑니다.</p>
+					</div>
+					<button type="button" class="hero__video" data-hero-video="ZYizun2skEA" aria-haspopup="dialog">
+						<span class="hero__video-icon"><svg aria-hidden="true" focusable="false"><use href="#hero-i-play"/></svg></span>
+						<span class="hero__video-text">빅텍스 소개 영상<br> 재생하기</span>
+					</button>
 				</div>
-				<div class="mv_scroll">
-					<a href="#n"><img src="assets/images/hero/scroll_mv.png" /></a>	
+
+				<!-- 우측 : 2개 부문 사업 -->
+				<div class="hero__biz">
+					<a class="hero-biz hero-biz--ccus" href="../original/s1/s1_3.html">
+						<div class="hero-biz__media" aria-hidden="true">
+							<picture>
+								<source srcset="assets/images/hero/hero-ccus-panel.webp" type="image/webp">
+								<img src="assets/images/hero/hero-ccus-panel.jpg" width="1000" height="750" alt="" loading="lazy" decoding="async">
+							</picture>
+						</div>
+						<div class="hero-biz__body">
+							<span class="hero-biz__icon"><svg aria-hidden="true" focusable="false"><use href="#hero-i-leaf"/></svg></span>
+							<div class="hero-biz__text">
+								<h2 class="hero-biz__title">CCUS 탄소중립 통합 솔루션</h2>
+								<p class="hero-biz__desc">탄소 포집부터 활용·저장까지,<br> 탄소중립을 위한 통합 솔루션을 제공합니다.</p>
+								<span class="hero-biz__more">자세히 보기 <svg aria-hidden="true" focusable="false"><use href="#hero-i-arrow"/></svg></span>
+							</div>
+						</div>
+					</a>
+					<a class="hero-biz hero-biz--nuclear" href="../original/s2/s2_4.html">
+						<div class="hero-biz__media" aria-hidden="true">
+							<picture>
+								<source srcset="assets/images/hero/hero-nuclear.webp" type="image/webp">
+								<img src="assets/images/hero/hero-nuclear.jpg" width="314" height="556" alt="" loading="lazy" decoding="async">
+							</picture>
+						</div>
+						<div class="hero-biz__body">
+							<span class="hero-biz__icon"><svg aria-hidden="true" focusable="false"><use href="#hero-i-atom"/></svg></span>
+							<div class="hero-biz__text">
+								<h2 class="hero-biz__title">원전해체 /<br> 원자력산업 솔루션</h2>
+								<p class="hero-biz__desc">국내 유일 원전해체 원격 로봇시스템은<br> 효율적이고 안전한 원전해체 및<br> 제염 솔루션을 제공합니다.</p>
+								<span class="hero-biz__more">자세히 보기 <svg aria-hidden="true" focusable="false"><use href="#hero-i-arrow"/></svg></span>
+							</div>
+						</div>
+					</a>
 				</div>
+
+				<!-- 하단 : 회사 지표 -->
+				<ul class="hero__stats" aria-label="빅텍스 주요 지표">
+					<li><svg aria-hidden="true" focusable="false"><use href="#hero-i-award"/></svg><span><strong>2000년</strong>설립연도</span></li>
+					<li><svg aria-hidden="true" focusable="false"><use href="#hero-i-people"/></svg><span><strong>120+</strong>전문 인력</span></li>
+					<li><svg aria-hidden="true" focusable="false"><use href="#hero-i-growth"/></svg><span><strong>265억</strong>2025년 매출 (억원)</span></li>
+					<li><svg aria-hidden="true" focusable="false"><use href="#hero-i-gear"/></svg><span><strong>독자 기술</strong>핵심 기술 보유</span></li>
+					<li><svg aria-hidden="true" focusable="false"><use href="#hero-i-globe"/></svg><span><strong>글로벌 파트너십</strong>국내·외 협력 네트워크</span></li>
+				</ul>
 			</article>
+
+			<!-- 소개 영상 레이어 -->
+			<dialog class="hero-modal" aria-label="빅텍스 소개 영상">
+				<div class="hero-modal__frame"></div>
+				<button type="button" class="hero-modal__close" aria-label="영상 닫기"><span aria-hidden="true">&times;</span></button>
+			</dialog>
 		</div>
 
 		<!-- ===================== HERO : END ===================== -->
@@ -1087,12 +1162,9 @@ $(window).resize(function(){//사이즈 리사이징 시
 <script>
 $(function(){
 	$('#fullpage').fullpage();
-	// [RENEWAL] .mv_scroll 클릭 → assets/js/hero.js
 });
 
 $(document).ready(function(){
-	// [RENEWAL] Main Visual(히어로) 슬라이더 → assets/js/hero.js
-
 	var Mcnt2_owl = $(".mcnt2_owl").owlCarousel({
 		//animateOut : 'fadeOut',
 		//animateIn : 'fadeIn',
