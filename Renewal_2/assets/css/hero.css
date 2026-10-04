@@ -65,12 +65,14 @@
 	flex-direction: column;
 	gap: clamp(26px, 5vh, 58px);
 	width: 100%;
-	padding: 0 var(--hero-gutter) clamp(20px, 6vh, 80px);
+	box-sizing: border-box; /* 1024px 미만 세로 배치에서 화면보다 넓어지지 않도록 */
+	padding: 0 var(--hero-gutter) clamp(40px, 14vh, 160px);
 }
 .hero__title { display: flex; flex-direction: column; gap: clamp(18px, 3vh, 34px); margin: 0; font-weight: 700; }
-.hero__logo img { display: block; width: clamp(200px, 17.5vw, 336px); height: auto; }
+.hero__logo img { display: block; width: clamp(200px, min(20vw, 34vh), 336px); height: auto; } /* 로고 원본 316px → 최대 336px */
 .hero__copy {
-	font-size: clamp(26px, 2.05vw, 40px);
+	font-size: clamp(26px, 2.2vw, 42px);
+	letter-spacing: -.01em;
 	line-height: 1.45;
 	color: #1c3a72;
 	word-break: keep-all;
@@ -88,9 +90,9 @@
 }
 .hero__biz::before {
 	content: ""; position: absolute;
-	left: 4px; top: .9em; bottom: .9em;
-	border-left: 2px dotted rgba(28, 58, 114, .45);
-	font-size: clamp(17px, 1.3vw, 25px);
+	left: 4px; top: 0; bottom: .9em; /* 시안처럼 첫 점 위에서 시작 */
+	border-left: 2px dotted rgba(1, 64, 153, .45);
+	font-size: clamp(18px, min(1.55vw, 2.9vh), 30px);
 }
 .hero__biz li { position: relative; }
 .hero__biz li::before {
@@ -100,14 +102,16 @@
 	width: 10px; height: 10px;
 	margin-top: -5px;
 	border-radius: 50%;
-	background: #1c3a72;
+	background: var(--vt-blue-700);
 }
 .hero__biz a {
 	display: inline-flex;
 	align-items: center;
 	gap: 14px;
 	padding: 4px 0;
-	font-size: clamp(17px, 1.3vw, 25px);
+	font-size: clamp(18px, min(1.55vw, 2.9vh), 30px);
+	letter-spacing: .02em;
+	word-break: keep-all;
 	line-height: 1.4;
 	font-weight: 600;
 	color: #222d42;
@@ -133,8 +137,8 @@
 body.fp-viewing-MAIN .top_bt { opacity: 0; visibility: hidden; }
 
 /* fullPage 우측 내비 점 : 밝은 하늘·회색 설비 사진 위에서도 보이도록 */
-body.fp-viewing-MAIN #fp-nav ul li a span { background: rgba(20, 40, 75, .35); box-shadow: 0 0 0 1px rgba(255, 255, 255, .7); }
-body.fp-viewing-MAIN #fp-nav ul li a.active span { background: var(--vt-blue-700); }
+body.fp-viewing-MAIN #fp-nav ul li a span { background: rgba(20, 40, 75, .8); box-shadow: 0 0 0 1px rgba(255, 255, 255, .7); }
+body.fp-viewing-MAIN #fp-nav ul li a.active span { background: var(--vt-blue-700); transform: scale(1.4); } /* main.css 가 크기를 10px !important 로 고정 → scale 사용 */
 
 /* 첫 화면 등장 효과 --------------------------------------------------------- */
 @keyframes hero-rise { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
