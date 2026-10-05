@@ -2,7 +2,7 @@
   "name": "victex-homepage",
   "version": "0.1.0",
   "private": true,
-  "description": "빅텍스(VICTEX) 홈페이지 리뉴얼 — 현행 사이트 복제본(original/)과 시안별 리뉴얼 작업본(Renewal_1/, Renewal_2/, Renewal_4/)",
+  "description": "빅텍스(VICTEX) 홈페이지 리뉴얼 — 현행 사이트 복제본(original/)과 시안별 리뉴얼 작업본(Renewal_1/ ~ Renewal_5/)",
   "scripts": {
     "dev": "http-server . -p 8080 -c-1 -o /index.html",
     "shots": "node tools/screenshots.js",

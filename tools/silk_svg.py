@@ -97,9 +97,37 @@ def panel_svg():
 '''
 
 
+def top_svg():
+    # Renewal_3 · Renewal_5 상단 소개 영역 (viewBox 1600x420) :
+    # 소개 문구 아래에서 시작해 사옥 사진 쪽 위로 휘어 올라가는 실크 리본 (3-1안 시안의 파란 곡선)
+    yc = lambda x: 430 - 330 * smoothstep(250, 1050, x) + 18 * math.sin(x / 90)
+    w = lambda x: 70 * math.cos((x - 520) / 520 * math.pi) * (1 - .4 * smoothstep(700, 1050, x))
+    body = '\n'.join([
+        glow(260, 900, yc, 90, .55, color='#d6e6f7'),
+        ribbon(250, 1050, yc, w, 44, 't1', .72, step=18),
+    ])
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 420" preserveAspectRatio="none" fill="none">
+<defs>
+<linearGradient id="t1" gradientUnits="userSpaceOnUse" x1="250" y1="0" x2="1050" y2="0"><stop offset="0" stop-color="#4f86c6" stop-opacity="0"/><stop offset=".3" stop-color="#4a82c4"/><stop offset=".75" stop-color="#7aa6d8"/><stop offset="1" stop-color="#a9c6e8" stop-opacity="0"/></linearGradient>
+<filter id="blur" filterUnits="userSpaceOnUse" x="-200" y="-100" width="2000" height="620"><feGaussianBlur stdDeviation="22"/></filter>
+</defs>
+<g stroke-linecap="round" stroke-linejoin="round">
+{body}
+</g>
+</svg>
+'''
+
+
 if __name__ == '__main__':
     out = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'Renewal_4', 'assets', 'images', 'hero')
     for name, svg in [('hero-silk.svg', main_svg()), ('hero-silk-panel.svg', panel_svg())]:
         with open(os.path.join(out, name), 'w', encoding='utf-8') as f:
             f.write(svg)
         print(name, round(len(svg) / 1024), 'KB')
+    top = top_svg()
+    for site in ('Renewal_3', 'Renewal_5'):
+        d = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', site, 'assets', 'images', 'hero')
+        if os.path.isdir(d):
+            with open(os.path.join(d, 'hero-silk-top.svg'), 'w', encoding='utf-8') as f:
+                f.write(top)
+            print(site, 'hero-silk-top.svg', round(len(top) / 1024), 'KB')
