@@ -24,31 +24,36 @@
 │   ├── index.html   구조는 Renewal_1 과 같음 (히어로 블록만 다름)
 │   └── assets/      css/tokens.css · css/hero.css · images/hero/ (로고, 플랜트 사진)
 │
+├── Renewal_4/       리뉴얼 시안 4 — 4안 (Renewal_1 구성 + 실크 물결 배경 · 원본 사진 · CO₂ 아이콘)
+│   └── assets/      css/hero.css · js/hero.js · images/hero/ (hero-silk*.svg, 사진, icon-co2.png)
+│
 ├── docs/
 │   ├── 01-site-analysis.md       현행 사이트 구조·기술·문제점 분석
 │   ├── 02-hero-renewal-brief.md  리뉴얼 전 히어로 사양, 결정 필요 항목, 체크리스트
 │   ├── 03-hero-1-1.md            Renewal_1 (1-1안) 적용 내용, 오픈 전 확인 항목
-│   └── 04-hero-2-1.md            Renewal_2 (2-1안) 적용 내용, 오픈 전 확인 항목
+│   ├── 04-hero-2-1.md            Renewal_2 (2-1안) 적용 내용, 오픈 전 확인 항목
+│   └── 05-hero-4.md              Renewal_4 (4안) 적용 내용
 │
 └── tools/
     ├── mirror.py        현행 사이트 → original/ 복제 스크립트
-    └── screenshots.js   original / Renewal_1 / Renewal_2 화면 캡처 비교
+    ├── silk_svg.py      Renewal_4 실크 물결 배경 SVG 생성
+    └── screenshots.js   original / Renewal_1 / Renewal_2 / Renewal_4 화면 캡처 비교
 ```
 
 ## 실행
 
 ```bash
 npm install
-npm run dev        # http://localhost:8080 → original / Renewal_1 / Renewal_2 선택 화면
+npm run dev        # http://localhost:8080 → original / Renewal_1 / Renewal_2 / Renewal_4 선택 화면
 ```
 
 Node가 없다면 `python3 -m http.server 8080`으로도 열 수 있습니다.
-반드시 **저장소 루트**에서 서버를 실행하세요. Renewal_1·Renewal_2의 서브 페이지 링크가 `../original/`을 가리키기 때문입니다.
+반드시 **저장소 루트**에서 서버를 실행하세요. 각 Renewal 폴더의 서브 페이지 링크가 `../original/`을 가리키기 때문입니다.
 
 ## 작업 원칙
 
 1. `original/`은 현행 사이트 기록용이므로 수정하지 않습니다. 다시 받아야 하면 `npm run mirror`를 실행합니다.
-2. 리뉴얼은 시안별 폴더(`Renewal_1/`, `Renewal_2/`)에서 **섹션 단위로** 진행합니다. 새로 만드는 코드는 각 폴더의 `assets/`에 두고, 끝난 섹션의 legacy 규칙은 지웁니다.
+2. 리뉴얼은 시안별 폴더(`Renewal_1/`, `Renewal_2/`, `Renewal_4/`)에서 **섹션 단위로** 진행합니다. 새로 만드는 코드는 각 폴더의 `assets/`에 두고, 끝난 섹션의 legacy 규칙은 지웁니다.
 3. 섹션을 바꾼 뒤에는 `npm run shots -- --sections`로 다른 섹션이 바뀌지 않았는지 확인합니다.
 
 ## 진행 현황
@@ -59,4 +64,5 @@ Node가 없다면 `python3 -m http.server 8080`으로도 열 수 있습니다.
 - [x] 히어로 리뉴얼 준비 — 코드 분리 + 브리프 → [docs/02-hero-renewal-brief.md](docs/02-hero-renewal-brief.md)
 - [x] Renewal_1 — 히어로 1-1안(2부문 사업 메인 · 화이트 블루) → [docs/03-hero-1-1.md](docs/03-hero-1-1.md)
 - [x] Renewal_2 — 히어로 2-1안(EPC 환경/엔지니어링 전문기업 이미지) → [docs/04-hero-2-1.md](docs/04-hero-2-1.md)
+- [x] Renewal_4 — 히어로 4안(Renewal_1 구성 + 시안 효과) → [docs/05-hero-4.md](docs/05-hero-4.md)
 - [ ] 시안 확정 후 오픈 전 확인 (고해상도 사진, 지표 수치, 소개 영상) — 03·04 문서의 확인 항목

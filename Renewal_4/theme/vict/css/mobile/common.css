@@ -1,0 +1,47 @@
+@charset "utf-8";
+/**** Common ************************************************/
+
+* {max-height:1000000px;margin:0;padding:0;}
+img, fieldset, button {border:none;}
+hr, button img {display:none;}
+input, select, button, textarea {font-family:'Noto Sans Korean', 'Noto Sans KR', 'Malgun Gothic','맑은 고딕','돋움',Dotum,'굴림',Gulim,Tahoma,Verdana,Geneva,sans-serif,Apple Gothic,AppleGothic; font-size:16px;font-weight:400;color:#666;line-height:26px;letter-spacing:-0.03em !important;box-sizing:border-box;vertical-align:middle;}
+input[type=submit] {cursor:pointer;appearance:none;-moz-appearance:none;-webkit-appearance:none;border-radius:0;-moz-border-radius:0;-webkit-border-radius:0;}
+
+ul, li {list-style:none;}
+a {display:block;font-weight:400;color:#666;text-decoration:none;vertical-align:top;}
+a:hover, a:active, a:focus, a:visited {text-decoration:none;}
+textarea {overflow:auto;} 
+table {width:100%;table-layout:fixed;border-collapse:collapse;border-spacing:0;text-align:center;}
+table img {vertical-align:top;}
+th, td {vertical-align:middle;word-wrap:break-word;word-break:break-all;}
+form  {margin:0;padding:0;}
+img {width:100%;vertical-align:top;}
+table img {width:auto;vertical-align:middle;}
+legend  {position:absolute;left:0;top:0;width:0;height:0;overflow:hidden;visibility:hidden;font-size:0;line-height:0;} /* For Screen Reader */ 
+caption {width:0;height:0;margin:0;padding:0;font-size:0;line-height:0;text-indent:-9999px;overflow:hidden;visibility:hidden;}
+em {font-style:normal;}
+p {display:block;}
+
+h1,h2,h3,h4,h5,h6{letter-spacing: -0.03em !Important;}
+
+/* .blind, .disabled {position:absolute;left:-9999px;top:-9999px;} */
+
+.clear:after {content:"";display:block;clear:both;}
+.fawb:before, .fawa:after {font-family:FontAwesome;text-rendering:auto;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscalecolor:#fff;}
+/*.nanumSq {font-family:'NanumSquare', 'Malgun Gothic','맑은 고딕','돋움',Dotum,'굴림',Gulim,Tahoma,Verdana,Geneva,sans-serif,Apple Gothic,AppleGothic;}*/
+
+body {position:relative;background:#fff;font-family:'Noto Sans Korean', 'Noto Sans KR', 'Malgun Gothic','맑은 고딕','돋움',Dotum,'굴림',Gulim,Tahoma,Verdana,Geneva,sans-serif,Apple Gothic,AppleGothic; font-size:16px;font-weight:400;color:#666;line-height:30px;letter-spacing:-0.03em !important; -webkit-text-size-adjust:none;font-smoothing:antialiased;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;}
+
+.table_ty1{}
+.table_ty1 table{}
+.sound_only{display: none !important;}
+#hd_login_msg{display: none !important;}
+
+/*주요색상*/
+
+
+
+
+
+
+
