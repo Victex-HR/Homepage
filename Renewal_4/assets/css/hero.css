@@ -176,8 +176,13 @@
 .hero-biz__media img { display: block; width: 100%; height: 100%; }
 .hero-biz__media { transition: opacity .6s ease; }
 .hero-biz__media img { object-fit: cover; transition: transform 1.2s var(--hero-ease), filter .6s ease; }
-.hero-biz--ccus .hero-biz__media { opacity: 0; }
-.hero-biz--ccus .hero-biz__media img { object-position: 30% 50%; filter: saturate(.6); }
+.hero-biz--ccus .hero-biz__media img { object-position: 30% 50%; filter: saturate(.75) brightness(1.03); }
+.hero-biz--ccus .hero-biz__media::after { /* 사진 위 옅은 화이트 블루 막 : 글자 쪽(왼쪽)은 진하게, 오른쪽은 사진이 비치도록 */
+	content: ""; position: absolute; inset: 0;
+	background:
+		linear-gradient(100deg, rgba(244, 249, 255, .86) 0%, rgba(238, 246, 254, .8) 55%, rgba(228, 239, 252, .58) 82%, rgba(222, 236, 251, .42) 100%);
+	transition: opacity .6s ease;
+}
 .hero-biz--nuclear .hero-biz__media {
 	right: 36%;
 	-webkit-mask-image: linear-gradient(90deg, #000 55%, transparent 100%);
@@ -248,10 +253,13 @@
 .hero-biz:focus-visible .hero-biz__more svg { transform: translateX(5px); }
 .hero-biz:hover .hero-biz__media img { transform: scale(1.04); }
 /* 패널 사진 색감 : 마우스를 올리거나 키보드로 포커스하면 진하게 */
-.hero-biz--ccus:hover .hero-biz__media,
-.hero-biz--ccus:focus-visible .hero-biz__media { opacity: .24; }
+.hero-biz--ccus:hover .hero-biz__media::after,
+.hero-biz--ccus:focus-visible .hero-biz__media::after { opacity: .92; }
+/* 사진이 비치는 CCUS 패널은 설명·링크 글자를 한 단계 진하게 (사진 위에서도 대비 4.5:1 이상) */
+.hero-biz--ccus .hero-biz__desc { color: #2b3d52; }
+.hero-biz--ccus .hero-biz__more { color: #2f4b63; border-bottom-color: rgba(20, 40, 75, .4); }
 .hero-biz--ccus:hover .hero-biz__media img,
-.hero-biz--ccus:focus-visible .hero-biz__media img { filter: saturate(1.1); }
+.hero-biz--ccus:focus-visible .hero-biz__media img { filter: saturate(1.35) contrast(1.06); }
 .hero-biz--nuclear:hover .hero-biz__media img,
 .hero-biz--nuclear:focus-visible .hero-biz__media img { filter: saturate(1.4) contrast(1.08); }
 .hero-biz:focus-visible { outline: none; }
