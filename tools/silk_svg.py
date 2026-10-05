@@ -40,9 +40,9 @@ def ribbon(x0, x1, yc, w, n, grad, op_max, op_min=.06, width=.7, step=24, depth=
     return '\n'.join(out)
 
 
-def glow(x0, x1, yc, width, op, step=40):
+def glow(x0, x1, yc, width, op, step=40, color='#fff'):
     pts = [(x, yc(x)) for x in range(int(x0), int(x1) + 1, step)]
-    return f'<path d="{smooth_path(pts)}" stroke="#fff" stroke-opacity="{op}" stroke-width="{width}" filter="url(#blur)"/>'
+    return f'<path d="{smooth_path(pts)}" stroke="{color}" stroke-opacity="{op}" stroke-width="{width}" filter="url(#blur)"/>'
 
 
 def smoothstep(a, b, x):
@@ -59,22 +59,22 @@ def main_svg():
     # 2) 좌상단 : 제목 위쪽을 대각선으로 스치는 옅은 리본
     yc2 = lambda x: 360 - .62 * (x + 60) + 26 * math.sin(x / 120)
     w2 = lambda x: 150 * math.cos((x - 120) / 420 * math.pi)
-    # 3) 중앙 하단 : 사진 바닥을 감싸며 오른쪽으로 빠지는 리본
-    yc3 = lambda x: 860 - 90 * smoothstep(380, 1350, x) + 22 * math.sin(x / 110)
-    w3 = lambda x: 90 * math.cos((x - 520) / 380 * math.pi)
+    # 3) 중앙 하단 : 탱크 받침 아래 바닥만 스치며 오른쪽으로 빠지는 리본 (사진 위를 덮지 않도록)
+    yc3 = lambda x: 850 - 30 * smoothstep(500, 1350, x) + 12 * math.sin(x / 110)
+    w3 = lambda x: 70 * math.cos((x - 560) / 420 * math.pi)
     body = '\n'.join([
-        glow(-60, 1000, yc1, 150, .9),
-        glow(380, 1350, yc3, 80, .7),
-        ribbon(-60, 1000, yc1, w1, 56, 'g1', .78, depth=d1),
+        # 빛 번짐은 사진이 없는 왼쪽 아래에만, 흰색 대신 옅은 하늘색으로 (사진을 뿌옇게 덮지 않도록)
+        glow(-60, 520, lambda x: 790 + 20 * math.sin(x / 160), 170, .45, color='#c9dcf2'),
+        ribbon(-60, 720, yc1, w1, 56, 'g1', .78, depth=d1),
         ribbon(-60, 560, yc2, w2, 40, 'g2', .36),
         ribbon(380, 1350, yc3, w3, 40, 'g3', .5),
     ])
     return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" preserveAspectRatio="none" fill="none">
 <defs>
-<linearGradient id="g1" gradientUnits="userSpaceOnUse" x1="-60" y1="0" x2="1000" y2="0"><stop offset="0" stop-color="#5a86bf"/><stop offset=".55" stop-color="#6d97cd"/><stop offset="1" stop-color="#a7c2e5" stop-opacity="0"/></linearGradient>
+<linearGradient id="g1" gradientUnits="userSpaceOnUse" x1="-60" y1="0" x2="720" y2="0"><stop offset="0" stop-color="#5a86bf"/><stop offset=".55" stop-color="#6d97cd"/><stop offset="1" stop-color="#a7c2e5" stop-opacity="0"/></linearGradient>
 <linearGradient id="g2" gradientUnits="userSpaceOnUse" x1="-60" y1="0" x2="560" y2="0"><stop offset="0" stop-color="#8fb0da"/><stop offset="1" stop-color="#8fb0da" stop-opacity="0"/></linearGradient>
 <linearGradient id="g3" gradientUnits="userSpaceOnUse" x1="380" y1="0" x2="1350" y2="0"><stop offset="0" stop-color="#86a9d6" stop-opacity="0"/><stop offset=".4" stop-color="#86a9d6"/><stop offset="1" stop-color="#a7c2e5" stop-opacity="0"/></linearGradient>
-<filter id="blur" x="-10%" y="-60%" width="120%" height="220%"><feGaussianBlur stdDeviation="26"/></filter>
+<filter id="blur" filterUnits="userSpaceOnUse" x="-200" y="-100" width="2000" height="1100"><feGaussianBlur stdDeviation="26"/></filter>
 </defs>
 <g stroke-linecap="round" stroke-linejoin="round">
 {body}
@@ -85,11 +85,11 @@ def main_svg():
 
 def panel_svg():
     # 우측 상단 CCUS 패널 안쪽 (viewBox 760x430 ≒ 패널) : 왼쪽 아래에서 오른쪽 위로 흐르는 옅은 리본
-    yc = lambda x: 430 - .42 * (x - 120) + 30 * math.sin(x / 90)
-    w = lambda x: 120 * math.cos((x - 300) / 360 * math.pi)
-    body = ribbon(120, 780, yc, w, 36, 'p1', .34, step=20)
+    yc = lambda x: 500 - .55 * (x - 300) + 15 * math.sin(x / 80)
+    w = lambda x: 100 * math.cos((x - 400) / 400 * math.pi)
+    body = ribbon(300, 800, yc, w, 40, 'p1', .5, step=16)
     return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 430" preserveAspectRatio="none" fill="none">
-<defs><linearGradient id="p1" gradientUnits="userSpaceOnUse" x1="120" y1="0" x2="780" y2="0"><stop offset="0" stop-color="#8db0da" stop-opacity="0"/><stop offset=".45" stop-color="#7fa6d6"/><stop offset="1" stop-color="#9dbbe2"/></linearGradient></defs>
+<defs><linearGradient id="p1" gradientUnits="userSpaceOnUse" x1="300" y1="0" x2="800" y2="0"><stop offset="0" stop-color="#8db0da" stop-opacity="0"/><stop offset=".4" stop-color="#6f98cf"/><stop offset="1" stop-color="#9dbbe2"/></linearGradient></defs>
 <g stroke-linecap="round" stroke-linejoin="round">
 {body}
 </g>
