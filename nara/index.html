@@ -141,6 +141,17 @@ footer { color: var(--muted); font-size: 12.5px; }
 .period .hint { color: var(--muted); font-size: 12.5px; margin-left: auto; }
 .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--fg); color: var(--bg);
   padding: 10px 16px; border-radius: 8px; font-size: 14px; box-shadow: 0 6px 20px rgb(0 0 0 / .2); z-index: 10; max-width: calc(100% - 32px); }
+.ms { position: relative; }
+.ms summary { list-style: none; cursor: pointer; font-size: 14px; border: 1px solid var(--line); border-radius: 8px; padding: 7px 28px 7px 10px; background: var(--bg); white-space: nowrap; max-width: 260px; overflow: hidden; text-overflow: ellipsis; position: relative; }
+.ms summary::-webkit-details-marker { display: none; }
+.ms summary::after { content: "▾"; position: absolute; right: 10px; color: var(--muted); }
+.ms.on summary { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.ms .menu { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; min-width: 220px; max-height: 340px; overflow: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.12); padding: 6px; }
+.ms .menu label { display: flex; gap: 8px; align-items: center; padding: 6px 8px; border-radius: 6px; font-size: 14px; cursor: pointer; white-space: nowrap; }
+.ms .menu label:hover { background: var(--accent-soft); }
+.ms .menu .cnt { margin-left: auto; padding-left: 12px; color: var(--muted); font: 12px var(--mono); }
+.ms .menu .act { display: flex; justify-content: space-between; border-top: 1px solid var(--line); margin-top: 4px; padding: 6px 4px 2px; }
+.ms .menu .act button { font: 13px var(--sans); color: var(--accent); background: none; border: 0; cursor: pointer; padding: 2px 4px; }
 .filters select, .budget input { font: 14px var(--sans); color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 8px; max-width: 100%; }
 .budget { display: inline-flex; gap: 6px; align-items: center; font-size: 14px; color: var(--muted); }
 .budget input { width: 110px; font-family: var(--mono); }
@@ -180,10 +191,10 @@ td.t { white-space: nowrap; font-family: var(--mono); font-size: 12.5px; color: 
 
   <section class="period filters" aria-label="필터">
     <span class="lbl">필터</span>
-    <select id="fRec" aria-label="추천 기준"><option value="">추천 기준: 전체</option><option value="rec">추천 공고만</option></select>
-    <select id="fType" aria-label="업무구분"><option value="">업무구분: 전체</option></select>
-    <select id="fCntr" aria-label="계약방법"><option value="">계약방법: 전체</option></select>
-    <select id="fBid" aria-label="입찰방식"><option value="">입찰방식: 전체</option></select>
+    <details class="ms" id="fRec" data-label="추천 기준"><summary></summary><div class="menu"></div></details>
+    <details class="ms" id="fType" data-label="업무구분"><summary></summary><div class="menu"></div></details>
+    <details class="ms" id="fCntr" data-label="계약방법"><summary></summary><div class="menu"></div></details>
+    <details class="ms" id="fBid" data-label="입찰방식"><summary></summary><div class="menu"></div></details>
     <label class="budget">예산 <input type="number" id="fBudget" min="0" step="1000" inputmode="numeric" placeholder="0"> 만원 이상</label>
     <button class="btn" type="button" id="fReset">필터 초기화</button>
   </section>
@@ -360,41 +371,54 @@ async function loadPeriod() {
 }
 
 /* ---------- 공통 필터 ---------- */
-const FREC_FIXED = 2;   // fRec 의 고정 항목 수 (전체, 추천만)
-function fill(sel, values, keepN = 1) {
-  const keep = sel.dataset.want ?? sel.value; sel.length = keepN;
-  values.forEach(v => sel.insertAdjacentHTML("beforeend", `<option value="${esc(v)}">${esc(v)}</option>`));
-  sel.value = [...sel.options].some(o => o.value === keep) ? keep : "";
+// 각 필터는 여러 값을 고를 수 있다. 한 필터 안에서는 하나라도 맞으면, 필터끼리는 모두 맞아야 통과.
+const MS = ["fRec", "fType", "fCntr", "fBid"];
+const SEL = Object.fromEntries(MS.map(k => [k, new Set()]));
+const MSKEY = { fType: "bsnsDivNm", fCntr: "cntrctCnclsMthdNm", fBid: "bidwinrDcsnMthdNm" };
+const counts = key => { const c = {}; ROWS.forEach(b => { const v = b[key] || "기타"; c[v] = (c[v] || 0) + 1; }); return c; };
+function msOptions(k) {
+  if (k === "fRec") {
+    const g = [...(CRIT.keyword_groups || []).map(g => g.name), ...((CRIT.agencies || []).length ? ["발주처"] : [])];
+    const n = v => ROWS.filter(b => v === "rec" ? b.score != null : (b.groups || []).includes(v)).length;
+    return [["rec", "추천 공고 전체", n("rec")], ...g.map(x => [x, "추천 그룹: " + x, n(x)])];
+  }
+  const c = counts(MSKEY[k]);
+  for (const v of SEL[k]) if (!(v in c)) c[v] = 0;   // 고른 값은 이 기간에 없어도 남겨 둠
+  return Object.keys(c).sort((a, b) => c[b] - c[a]).map(v => [v, v, c[v]]);
 }
-const byCount = key => { const c = {}; ROWS.forEach(b => { const v = b[key] || "기타"; c[v] = (c[v] || 0) + 1; }); return Object.keys(c).sort((a, b) => c[b] - c[a]); };
+function msSummary(k) {
+  const el = $("#" + k), sel = [...SEL[k]], lab = el.dataset.label;
+  const name = v => k === "fRec" && v === "rec" ? "추천 공고" : v;
+  el.querySelector("summary").textContent = !sel.length ? `${lab}: 전체`
+    : sel.length <= 2 ? `${lab}: ${sel.map(name).join(", ")}` : `${lab}: ${name(sel[0])} 외 ${sel.length - 1}`;
+  el.classList.toggle("on", sel.length > 0);
+}
 function fillFilters() {
-  const groups = [...(CRIT.keyword_groups || []).map(g => g.name), ...((CRIT.agencies || []).length ? ["발주처"] : [])];
-  const r = $("#fRec"), keep = r.dataset.want ?? r.value; r.length = FREC_FIXED;
-  groups.forEach(g => r.insertAdjacentHTML("beforeend", `<option value="g:${esc(g)}">추천 그룹: ${esc(g)}</option>`));
-  r.value = [...r.options].some(o => o.value === keep) ? keep : "";
-  fill($("#fType"), byCount("bsnsDivNm")); fill($("#fCntr"), byCount("cntrctCnclsMthdNm")); fill($("#fBid"), byCount("bidwinrDcsnMthdNm"));
+  for (const k of MS) {
+    $("#" + k + " .menu").innerHTML = msOptions(k).map(([v, t, n]) =>
+      `<label><input type="checkbox" value="${esc(v)}" ${SEL[k].has(v) ? "checked" : ""}> ${esc(t)}<span class="cnt">${n.toLocaleString()}</span></label>`).join("")
+      + `<div class="act"><button type="button" data-a="all">모두 선택</button><button type="button" data-a="none">선택 해제</button></div>`;
+  }
   markFilters();
 }
 function markFilters() {
-  ["#fRec", "#fType", "#fCntr", "#fBid"].forEach(s => $(s).classList.toggle("on", !!$(s).value));
+  MS.forEach(msSummary);
   $("#fBudget").classList.toggle("on", +$("#fBudget").value > 0);
 }
 function passes(b) {
-  const rec = $("#fRec").value, min = (+$("#fBudget").value || 0) * 1e4;
-  if (rec === "rec" && b.score == null) return false;
-  if (rec.startsWith("g:") && !(b.groups || []).includes(rec.slice(2))) return false;
-  if ($("#fType").value && (b.bsnsDivNm || "기타") !== $("#fType").value) return false;
-  if ($("#fCntr").value && (b.cntrctCnclsMthdNm || "기타") !== $("#fCntr").value) return false;
-  if ($("#fBid").value && (b.bidwinrDcsnMthdNm || "기타") !== $("#fBid").value) return false;
+  const r = SEL.fRec, min = (+$("#fBudget").value || 0) * 1e4;
+  if (r.size && !((r.has("rec") && b.score != null) || (b.groups || []).some(g => r.has(g)))) return false;
+  for (const k in MSKEY) if (SEL[k].size && !SEL[k].has(b[MSKEY[k]] || "기타")) return false;
   if (min && (toInt(b.asignBdgtAmt) || toInt(b.presmptPrce)) < min) return false;
   return true;
 }
-
-const FKEYS = ["fRec", "fType", "fCntr", "fBid", "fBudget"];
-function saveFilters() { try { localStorage.setItem("naraFilters", JSON.stringify(Object.fromEntries(FKEYS.map(k => [k, $("#" + k).value])))); } catch (e) {} }
+function saveFilters() {
+  try { localStorage.setItem("naraFilters2", JSON.stringify({ ...Object.fromEntries(MS.map(k => [k, [...SEL[k]]])), fBudget: $("#fBudget").value })); } catch (e) {}
+}
 function loadFilters() {
-  let f = {}; try { f = JSON.parse(localStorage.getItem("naraFilters") || "{}"); } catch (e) {}
-  FKEYS.forEach(k => { if (f[k] != null) { const el = $("#" + k); el.dataset.want = f[k]; el.value = f[k]; } });
+  let f = {}; try { f = JSON.parse(localStorage.getItem("naraFilters2") || "{}"); } catch (e) {}
+  MS.forEach(k => { if (Array.isArray(f[k])) SEL[k] = new Set(f[k]); });
+  if (f.fBudget) $("#fBudget").value = f.fBudget;
 }
 
 /* ---------- 요약 ---------- */
@@ -623,9 +647,20 @@ async function init() {
   setQuick("1");
   ["#dq", "#dsort"].forEach(s => $(s).addEventListener("input", () => { shown = PAGE; renderTable(); }));
   ["#rq", "#ropen", "#rsoon"].forEach(s => $(s).addEventListener("input", renderRecs));
-  const onFilter = () => { FKEYS.forEach(k => delete $("#" + k).dataset.want);  markFilters(); shown = PAGE; renderTable(); renderRecs(); saveFilters(); };
-  ["#fRec", "#fType", "#fCntr", "#fBid", "#fBudget"].forEach(s => $(s).addEventListener("input", onFilter));
-  $("#fReset").onclick = () => { ["#fRec", "#fType", "#fCntr", "#fBid", "#fBudget"].forEach(s => $(s).value = ""); onFilter(); };
+  const onFilter = () => { markFilters(); shown = PAGE; renderTable(); renderRecs(); saveFilters(); };
+  for (const k of MS) {
+    const el = $("#" + k);
+    el.addEventListener("change", e => { const v = e.target.value; e.target.checked ? SEL[k].add(v) : SEL[k].delete(v); onFilter(); });
+    el.addEventListener("click", e => {
+      const a = e.target.dataset?.a; if (!a) return;
+      el.querySelectorAll("input").forEach(i => { i.checked = a === "all"; a === "all" ? SEL[k].add(i.value) : SEL[k].delete(i.value); });
+      onFilter();
+    });
+    el.addEventListener("toggle", () => { if (el.open) MS.forEach(o => o !== k && ($("#" + o).open = false)); });
+  }
+  document.addEventListener("click", e => { if (!e.target.closest(".ms")) MS.forEach(k => $("#" + k).open = false); });
+  $("#fBudget").addEventListener("input", onFilter);
+  $("#fReset").onclick = () => { MS.forEach(k => SEL[k].clear()); $("#fBudget").value = ""; fillFilters(); onFilter(); };
   loadFilters();
   $("#quick").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { setQuick(b.dataset.q); loadPeriod(); } });
   ["#from", "#to"].forEach(s => $(s).addEventListener("change", () => {
