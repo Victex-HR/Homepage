@@ -3,3 +3,6 @@ screenshots/
 .DS_Store
 Thumbs.db
 *.log
+nara/data/
+nara/bot/out/
+__pycache__/

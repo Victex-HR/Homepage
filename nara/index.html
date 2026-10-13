@@ -1,0 +1,586 @@
+<!doctype html>
+<html lang="ko">
+<title>나라장터 입찰 추천</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: 상단 요약 띠 → 탭(추천 공고 / 일일 정리) → 목록. 조달 문서의 차분한 잉크색, 추천은 청록, 마감 임박은 인주색. */
+:root {
+  --bg: #f4f6f8; --surface: #ffffff; --line: #dde3e9; --fg: #16202a; --muted: #5b6875;
+  --accent: #0b6b63; --accent-soft: #e2f1ef; --danger: #b8322a; --danger-soft: #fbe9e7;
+  --warn: #9a6512; --warn-soft: #fbf1df; --chip: #eef1f4;
+  --sans: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f1419; --surface: #161d25; --line: #26313c; --fg: #e5eaef; --muted: #93a0ad;
+  --accent: #46b8a8; --accent-soft: #15302d; --danger: #f0776b; --danger-soft: #3a1c1a;
+  --warn: #e0b061; --warn-soft: #332713; --chip: #1f2831; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0f1419; --surface: #161d25; --line: #26313c; --fg: #e5eaef; --muted: #93a0ad;
+  --accent: #46b8a8; --accent-soft: #15302d; --danger: #f0776b; --danger-soft: #3a1c1a;
+  --warn: #e0b061; --warn-soft: #332713; --chip: #1f2831; color-scheme: dark; }
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.55 var(--sans); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 48px; display: grid; gap: 20px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
+h1 { font-size: 22px; font-weight: 700; margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+.sub { color: var(--muted); font-size: 13px; }
+.banner { background: var(--warn-soft); color: var(--warn); border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent);
+  padding: 10px 14px; border-radius: 8px; font-size: 13.5px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: var(--line);
+  border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.stat { background: var(--surface); padding: 14px 16px; display: grid; gap: 2px; }
+.stat b { font: 500 24px/1.2 var(--mono); font-variant-numeric: tabular-nums; }
+.stat span { color: var(--muted); font-size: 12.5px; }
+.stat.is-hot b { color: var(--danger); }
+.stat.is-rec b { color: var(--accent); }
+
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
+.tab { appearance: none; border: 0; background: none; color: var(--muted); font: 600 15px var(--sans); padding: 10px 14px;
+  border-bottom: 2px solid transparent; margin-bottom: -1px; cursor: pointer; }
+.tab[aria-selected="true"] { color: var(--fg); border-color: var(--accent); }
+.tab:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.toolbar input[type=search], .toolbar select { font: 14px var(--sans); color: var(--fg); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.toolbar input[type=search] { flex: 1 1 220px; min-width: 0; }
+.toolbar label { display: inline-flex; gap: 6px; align-items: center; font-size: 14px; color: var(--muted); }
+.count { color: var(--muted); font-size: 13px; margin-left: auto; }
+
+.recs { display: grid; gap: 10px; }
+.rec { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px;
+  display: grid; grid-template-columns: 52px 1fr auto; gap: 4px 14px; align-items: start; }
+.score { grid-column: 1; grid-row: 1 / span 3; font: 500 20px/1 var(--mono); color: var(--accent); background: var(--accent-soft);
+  border-radius: 8px; height: 52px; display: grid; place-items: center; font-variant-numeric: tabular-nums; }
+.score small { display: block; font: 11px var(--sans); color: var(--muted); margin-top: -10px; }
+.rec h3 { grid-column: 2; grid-row: 1; margin: 0; font-size: 16px; font-weight: 600; line-height: 1.4; min-width: 0; text-wrap: pretty; }
+.rec h3 a { color: inherit; text-decoration: none; }
+.rec h3 a:hover { text-decoration: underline; text-decoration-color: var(--accent); }
+.rec .meta { grid-column: 2 / span 2; grid-row: 2; }
+.rec .why { grid-column: 2 / span 2; grid-row: 3; }
+.meta { color: var(--muted); font-size: 13.5px; display: flex; flex-wrap: wrap; gap: 2px 12px; min-width: 0; }
+.meta .num { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--fg); }
+.why { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--chip); color: var(--muted); white-space: nowrap; }
+.chip.k { background: var(--accent-soft); color: var(--accent); }
+.chip.t { font-weight: 600; }
+.dday { grid-row: 1; grid-column: 3; font: 500 13px var(--mono); padding: 3px 9px; border-radius: 6px; background: var(--chip); white-space: nowrap; }
+.dday.hot { background: var(--danger-soft); color: var(--danger); }
+.dday.soon { background: var(--warn-soft); color: var(--warn); }
+
+.days { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+.day { appearance: none; flex: 0 0 auto; border: 1px solid var(--line); background: var(--surface); color: var(--fg);
+  border-radius: 10px; padding: 8px 12px; text-align: left; cursor: pointer; font: 13px var(--sans); display: grid; gap: 2px; }
+.day b { font: 500 14px var(--mono); }
+.day span { color: var(--muted); font-size: 12px; }
+.day[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: var(--chip); margin-top: 4px; }
+.bar i { display: block; height: 100%; }
+.typesum { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--muted); }
+.typesum b { color: var(--fg); font-family: var(--mono); font-weight: 500; }
+.sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; vertical-align: 0; }
+
+.tablebox { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 760px; }
+th, td { padding: 9px 12px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: 0.02em; background: var(--surface); position: sticky; top: 0; }
+th button { all: unset; cursor: pointer; }
+td.n { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+td.d { font-family: var(--mono); white-space: nowrap; }
+tr.row { cursor: pointer; }
+tr.row:hover td { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+tr.row.on td { background: var(--accent-soft); }
+tr.dim td { color: var(--muted); }
+.sc { display: inline-block; min-width: 30px; text-align: center; font: 500 12px var(--mono); padding: 2px 6px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); }
+.detail td { background: var(--bg); }
+.dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 6px 20px; font-size: 13px; }
+.dl div { display: flex; gap: 8px; min-width: 0; }
+.dl dt { color: var(--muted); flex: 0 0 86px; }
+.dl dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.empty { padding: 32px; text-align: center; color: var(--muted); }
+a.out { color: var(--accent); font-weight: 600; text-decoration: none; white-space: nowrap; }
+a.out:hover { text-decoration: underline; }
+footer { color: var(--muted); font-size: 12.5px; }
+@media (max-width: 560px) {
+  .rec { grid-template-columns: 44px 1fr; }
+  .score { height: 44px; font-size: 17px; }
+  .score { grid-row: 1 / span 4; }
+  .dday { grid-column: 2; grid-row: 2; justify-self: start; }
+  .rec .meta { grid-column: 2; grid-row: 3; }
+  .rec .why { grid-column: 2; grid-row: 4; }
+}
+
+/* 추천 기준 탭 */
+.crit { display: grid; gap: 16px; }
+.cbox { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 10px; min-width: 0; }
+.cbox h3 { margin: 0; font-size: 15px; font-weight: 600; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.cbox h3 input { font: 600 15px var(--sans); color: var(--fg); background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 2px 6px; min-width: 0; flex: 1 1 160px; }
+.cbox h3 input:hover, .cbox h3 input:focus { border-color: var(--line); }
+.cbox .hint { color: var(--muted); font-size: 12.5px; margin: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.kchip { display: inline-flex; align-items: center; gap: 2px; font-size: 13px; padding: 3px 4px 3px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
+.kchip.ag { background: var(--chip); color: var(--fg); }
+.kchip button { all: unset; cursor: pointer; width: 18px; height: 18px; display: grid; place-items: center; border-radius: 50%; font-size: 14px; line-height: 1; color: inherit; opacity: .7; }
+.kchip button:hover { opacity: 1; background: color-mix(in srgb, currentColor 15%, transparent); }
+.kchip button:focus-visible { outline: 2px solid var(--accent); }
+.addrow { display: flex; gap: 6px; flex-wrap: wrap; }
+.addrow input, .grid2 input { font: 14px var(--sans); color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; min-width: 0; flex: 1 1 200px; }
+.btn { appearance: none; font: 600 13.5px var(--sans); border-radius: 8px; padding: 7px 12px; cursor: pointer; border: 1px solid var(--line); background: var(--surface); color: var(--fg); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.btn.ghost { border-color: transparent; color: var(--muted); }
+.btn.danger { color: var(--danger); border-color: transparent; background: transparent; }
+.btn:disabled { opacity: .5; cursor: default; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.grid2 label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+.checks { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 14px; }
+.grid2 .checks label, .checks label { display: inline-flex; gap: 6px; align-items: center; font-size: 14px; color: var(--fg); }
+.savebar { position: sticky; bottom: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px;
+  display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); }
+.savebar .msg { flex: 1 1 220px; font-size: 13.5px; color: var(--muted); min-width: 0; }
+.savebar .msg b { color: var(--accent); font-family: var(--mono); font-weight: 500; }
+.savebar .msg.err { color: var(--danger); }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>나라장터 입찰 추천</h1>
+    <div class="sub" id="gen">불러오는 중…</div>
+  </header>
+  <div class="banner" id="banner" hidden></div>
+  <section class="stats" id="stats" aria-label="요약"></section>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab" role="tab" id="tab-rec" aria-selected="true" aria-controls="p-rec">추천 공고</button>
+    <button class="tab" role="tab" id="tab-day" aria-selected="false" aria-controls="p-day">일일 정리</button>
+    <button class="tab" role="tab" id="tab-crit" aria-selected="false" aria-controls="p-crit">추천 기준</button>
+  </nav>
+
+  <section id="p-rec" role="tabpanel" aria-labelledby="tab-rec" style="display:grid;gap:12px">
+    <div class="toolbar">
+      <input type="search" id="rq" placeholder="공고명, 기관 검색">
+      <select id="rg" aria-label="키워드 그룹"><option value="">전체 그룹</option></select>
+      <select id="rt" aria-label="업무구분"><option value="">전체 업무</option></select>
+      <label><input type="checkbox" id="rsoon"> 7일 안에 마감</label>
+      <span class="count" id="rcount"></span>
+    </div>
+    <div class="recs" id="recs"></div>
+  </section>
+
+  <section id="p-day" role="tabpanel" aria-labelledby="tab-day" hidden style="display:grid;gap:12px">
+    <div class="days" id="days"></div>
+    <div class="typesum" id="typesum"></div>
+    <div class="toolbar">
+      <input type="search" id="dq" placeholder="공고명, 기관, 업종 검색">
+      <select id="dt" aria-label="업무구분"><option value="">전체 업무</option></select>
+      <label><input type="checkbox" id="donly"> 추천만</label>
+      <span class="count" id="dcount"></span>
+    </div>
+    <div class="tablebox">
+      <table>
+        <thead><tr>
+          <th><button data-k="score">추천</button></th><th>공고명</th><th>구분</th><th>공고기관</th>
+          <th style="text-align:right"><button data-k="budget">배정예산</button></th>
+          <th><button data-k="close">입찰마감</button></th><th>계약방법</th><th></th>
+        </tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="p-crit" role="tabpanel" aria-labelledby="tab-crit" hidden class="crit">
+    <p class="hint" style="margin:0">여기서 바꾼 기준은 이 화면의 추천에 바로 반영되고, 저장하면 매일 아침 수집에도 적용됩니다.
+      키워드는 공고명에서 찾습니다. 대소문자는 구분하지 않고, 여러 개는 쉼표나 줄바꿈으로 한 번에 넣을 수 있습니다.
+      앞에 <code>^</code>를 붙이면 단어 첫머리에서만 찾습니다 (<code>^고리</code>는 “고리2호기”는 찾고 “카테고리”는 건너뜀).</p>
+    <div id="groups" class="crit"></div>
+    <div><button class="btn" id="addGroup" type="button">+ 키워드 그룹 추가</button></div>
+
+    <div class="cbox">
+      <h3>발주처</h3>
+      <p class="hint">공고기관이나 수요기관 이름에 포함되면 추천합니다. 띄어쓰기와 “재단법인”, “(주)”는 무시합니다.</p>
+      <div class="chips" id="agencies"></div>
+      <div class="addrow"><input id="agIn" placeholder="기관명 입력 후 Enter"><button class="btn" type="button" id="agAdd">추가</button></div>
+    </div>
+
+    <div class="cbox">
+      <h3>걸러내기</h3>
+      <div class="grid2">
+        <div style="display:grid;gap:6px"><span class="hint">업무구분 (선택 안 하면 전체)</span>
+          <div class="checks" id="types"></div></div>
+        <label>최소 배정예산 (만원, 0은 제한 없음)<input id="minB" type="number" min="0" step="100" inputmode="numeric"></label>
+        <label>최대 배정예산 (만원, 0은 제한 없음)<input id="maxB" type="number" min="0" step="100" inputmode="numeric"></label>
+        <label>마감까지 최소 남은 일수<input id="minD" type="number" min="0" max="30" inputmode="numeric"></label>
+      </div>
+      <div style="display:grid;gap:6px"><span class="hint">회사 소재지 (지역제한 공고 중 이 지역이 아닌 것은 뺍니다. 비우면 제한 없음)</span>
+        <div class="chips" id="regions"></div>
+        <div class="addrow"><input id="rgIn" placeholder="예: 대전, 경기"><button class="btn" type="button" id="rgAdd">추가</button></div></div>
+      <div style="display:grid;gap:6px"><span class="hint">제외 키워드 (공고명에 있으면 추천에서 뺍니다)</span>
+        <div class="chips" id="excl"></div>
+        <div class="addrow"><input id="exIn" placeholder="예: 급식, 청소"><button class="btn" type="button" id="exAdd">추가</button></div></div>
+    </div>
+
+    <div class="savebar">
+      <div class="msg" id="smsg"></div>
+      <button class="btn ghost" type="button" id="reset">되돌리기</button>
+      <button class="btn primary" type="button" id="save">저장</button>
+    </div>
+  </section>
+
+  <footer id="foot">데이터: 조달청 나라장터 공공데이터개방표준서비스 (입찰공고정보)</footer>
+</div>
+
+<script>
+const TYPE_COLOR = { "물품": "var(--accent)", "용역": "var(--warn)", "공사": "var(--danger)", "외자": "var(--muted)", "기타": "var(--muted)" };
+const TYPES = ["물품", "용역", "공사", "외자"];
+const RECENT_DAYS = 10;
+// 공고 데이터는 매일 갱신되는 nara-data 브랜치에서 읽음 (홈페이지 이력에 데이터가 쌓이지 않도록)
+const DATA_BASE = location.hostname.endsWith("github.io")
+  ? "https://raw.githubusercontent.com/Victex-HR/homepage/nara-data/" : "data/";
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const clone = o => JSON.parse(JSON.stringify(o));
+const today = new Date(); today.setHours(0, 0, 0, 0);
+let META, CRIT, SAVED, DRAFT, DB = null, CAN_SAVE = true, DAYDATA = {}, RECS = [], curDay = null, sortKey = "score";
+
+/* ---------- 점수 (nara_bids.py 의 score 와 같은 규칙) ---------- */
+const isAlpha = c => /[a-z]/.test(c), isAlnum = c => /[a-z0-9가-힣]/.test(c), isAscii = s => /^[\x00-\x7f]*$/.test(s);
+function kwHit(k, text) {
+  if (!k || !text) return false;
+  const head = k.startsWith("^"), kl = k.replace(/^\^+/, "").toLowerCase(), low = text.toLowerCase();
+  if (!kl) return false;
+  const shortA = isAscii(kl) && kl.length <= 4;
+  for (let i = low.indexOf(kl); i >= 0; i = low.indexOf(kl, i + 1)) {
+    const b = i > 0 ? low[i - 1] : "", a = low[i + kl.length] || "";
+    let ok = !(head && b && isAlnum(b));
+    if (isAscii(kl) && b && isAlpha(b)) ok = false;
+    if (shortA && a && isAlpha(a)) ok = false;
+    if (ok) return true;
+  }
+  return false;
+}
+const orgNorm = s => (s || "").replace(/\s/g, "").replace(/재단법인|\(재\)|\(주\)/g, "");
+const toInt = v => Math.trunc(+v || 0);
+function dleft(d) { if (!d) return null; const x = new Date(d + "T00:00:00"); return Math.round((x - today) / 864e5); }
+
+function score(b, c, ref) {
+  const name = b.bidNtceNm || "", inds = b.bidprcPsblIndstrytyNm || "", why = [], groups = [];
+  if ((c.exclude_keywords || []).some(x => x && name.includes(x))) return null;
+  if ((c.business_types || []).length && !c.business_types.includes(b.bsnsDivNm)) return null;
+  if ((b.bidNtceSttusNm || "").includes("취소")) return null;
+  if (ref && b.bidClseDate) {
+    const left = Math.round((new Date(b.bidClseDate + "T00:00:00") - ref) / 864e5);
+    if (left < (c.min_days_to_deadline || 0)) return null;
+  }
+  const budget = toInt(b.asignBdgtAmt) || toInt(b.presmptPrce);
+  if (c.min_budget && budget && budget < c.min_budget) return null;
+  if (c.max_budget && budget && budget > c.max_budget) return null;
+  const regions = (c.regions || []).filter(r => r && r !== "전국");
+  if (b.rgnLmtYn === "Y" && regions.length) {
+    const rg = b.prtcptPsblRgnNm || "";
+    if (rg && !rg.includes("이하생략") && !regions.some(r => rg.includes(r))) return null;
+  }
+  let s = 0;
+  for (const g of c.keyword_groups || []) {
+    const hits = (g.keywords || []).filter(k => kwHit(k, name));
+    if (hits.length) { s += 30 + 10 * Math.min(hits.length - 1, 2); groups.push(g.name);
+      why.push({ g: g.name, t: hits.slice(0, 4).map(k => k.replace(/^\^+/, "")).join(", ") }); }
+    else if ((g.keywords || []).some(k => kwHit(k, inds))) { s += 10; groups.push(g.name); why.push({ g: g.name, t: "투찰가능업종" }); }
+  }
+  const insts = orgNorm((b.ntceInsttNm || "") + "|" + (b.dmndInsttNm || ""));
+  const ag = (c.agencies || []).find(a => a && insts.includes(orgNorm(a)));
+  if (ag) { s += 20; groups.push("발주처"); why.push({ g: "발주처", t: ag }); }
+  if (!s) return null;
+  if (b.indstrytyLmtYn === "Y") why.push({ t: "업종제한 있음" });
+  if (b.rgnLmtYn === "Y") why.push({ t: "지역제한 " + (b.prtcptPsblRgnNm || "있음") });
+  return { score: s, why, groups };
+}
+
+/* ---------- 공통 표시 ---------- */
+function won(v) {
+  const n = +v || 0; if (!n) return "-";
+  return n >= 1e8 ? (n / 1e8).toFixed(n >= 1e9 ? 0 : 1) + "억" : Math.round(n / 1e4).toLocaleString() + "만";
+}
+function ddayHtml(b) {
+  const n = dleft(b.bidClseDate); if (n === null) return "";
+  const cls = n <= 3 ? "hot" : n <= 7 ? "soon" : "";
+  return `<span class="dday ${cls}" title="입찰마감 ${esc(b.bidClseDate)} ${esc(b.bidClseTm)}">${n < 0 ? "마감" : n === 0 ? "오늘 마감" : "D-" + n}</span>`;
+}
+const whyChips = why => (why || []).map(w => `<span class="chip ${w.g ? "k" : ""}">${w.g ? esc(w.g) + " · " : ""}${esc(w.t)}</span>`).join("");
+const match = (b, q) => !q || [b.bidNtceNm, b.ntceInsttNm, b.dmndInsttNm, b.bidprcPsblIndstrytyNm, b.bidNtceNo].join(" ").toLowerCase().includes(q);
+function fillSelect(sel, values) {
+  const keep = sel.value; sel.length = 1;
+  values.forEach(t => sel.insertAdjacentHTML("beforeend", `<option>${esc(t)}</option>`));
+  sel.value = values.includes(keep) ? keep : "";
+}
+
+/* ---------- 추천 계산 ---------- */
+function computeRecs(c) {
+  const seen = new Map();
+  for (const d of META.days.slice(0, RECENT_DAYS)) for (const b of DAYDATA[d.date] || []) {
+    const r = score(b, c, today); if (!r) continue;
+    const prev = seen.get(b.bidNtceNo);
+    if (!prev || b.bidNtceOrd > prev.bidNtceOrd) seen.set(b.bidNtceNo, { ...b, ...r });
+  }
+  return [...seen.values()].sort((a, b) => b.score - a.score || (a.bidClseDate || "9").localeCompare(b.bidClseDate || "9"));
+}
+
+function refreshAll() {
+  RECS = computeRecs(CRIT);
+  fillSelect($("#rg"), [...(CRIT.keyword_groups || []).map(g => g.name), ...((CRIT.agencies || []).length ? ["발주처"] : [])]);
+  fillSelect($("#rt"), [...new Set(RECS.map(b => b.bsnsDivNm || "기타"))].sort());
+  renderStats(); renderRecs();
+  if (curDay) renderDays(), renderTable();
+  const kw = (CRIT.keyword_groups || []).map(g => g.name).join(", ");
+  $("#foot").textContent = `데이터: 조달청 나라장터 공공데이터개방표준서비스 (입찰공고정보) · 추천 기준: ${kw}${(CRIT.agencies || []).length ? ", 발주처 " + CRIT.agencies.length + "곳" : ""} · 추천은 최근 ${RECENT_DAYS}일 공고 기준`;
+}
+
+function renderStats() {
+  const last = META.days[0] || { total: 0, date: "-" };
+  const hot = RECS.filter(b => dleft(b.bidClseDate) <= 3).length;
+  $("#stats").innerHTML = [
+    [last.total.toLocaleString(), `${last.date} 새 공고`, ""],
+    [RECS.length, "진행 중인 추천 공고", "rec"],
+    [hot, "3일 안에 마감되는 추천", "hot"],
+    [META.totalStored.toLocaleString(), `누적 저장 (${META.days.length}일)`, ""],
+  ].map(([v, l, c]) => `<div class="stat ${c && "is-" + c}"><b>${v}</b><span>${l}</span></div>`).join("");
+}
+
+function renderRecs() {
+  const q = $("#rq").value.trim().toLowerCase(), g = $("#rg").value, t = $("#rt").value, soon = $("#rsoon").checked;
+  const list = RECS.filter(b => match(b, q) && (!g || b.groups.includes(g)) && (!t || b.bsnsDivNm === t) && (!soon || dleft(b.bidClseDate) <= 7));
+  $("#rcount").textContent = `${list.length}건`;
+  $("#recs").innerHTML = list.length ? list.slice(0, 200).map(b => `
+    <article class="rec">
+      <div class="score">${b.score}</div>
+      <h3><a href="${esc(b.bidNtceUrl)}" target="_blank" rel="noopener">${esc(b.bidNtceNm)}</a></h3>
+      ${ddayHtml(b)}
+      <div class="meta">
+        <span class="chip t" style="color:${TYPE_COLOR[b.bsnsDivNm] || "var(--muted)"}">${esc(b.bsnsDivNm)}</span>
+        <span>${esc(b.ntceInsttNm)}${b.dmndInsttNm && b.dmndInsttNm !== b.ntceInsttNm ? " → " + esc(b.dmndInsttNm) : ""}</span>
+        <span>배정예산 <span class="num">${won(b.asignBdgtAmt)}</span></span>
+        <span>${esc(b.cntrctCnclsMthdNm)} · ${esc(b.bidwinrDcsnMthdNm)}</span>
+        <span>마감 <span class="num">${esc(b.bidClseDate)} ${esc(b.bidClseTm)}</span></span>
+        <span>공고일 <span class="num">${esc(b.bidNtceDate)}</span></span>
+      </div>
+      <div class="why">${whyChips(b.why)}</div>
+    </article>`).join("") : `<div class="empty">조건에 맞는 추천 공고가 없습니다. 추천 기준 탭에서 키워드를 늘려 보세요.</div>`;
+}
+
+/* ---------- 일일 정리 ---------- */
+function dayRows(date) {
+  const ref = new Date(date + "T00:00:00");
+  return (DAYDATA[date] || []).map(b => { const r = score(b, CRIT, ref); return { ...b, score: r ? r.score : null, why: r ? r.why : [] }; });
+}
+function renderDays() {
+  const max = Math.max(...META.days.map(d => d.total), 1);
+  $("#days").innerHTML = META.days.map(d => {
+    const n = DAYDATA[d.date] ? dayRows(d.date).filter(b => b.score != null).length : null;
+    const segs = Object.entries(d.byType).map(([k, v]) => `<i style="width:${v / max * 100}%;background:${TYPE_COLOR[k] || "var(--muted)"}"></i>`).join("");
+    return `<button class="day" aria-pressed="${d.date === curDay}" data-d="${d.date}">
+      <b>${d.date.slice(5).replace("-", ".")}</b><span>공고 ${d.total}${n != null ? " · 추천 " + n : ""}</span><div class="bar">${segs}</div></button>`;
+  }).join("");
+}
+async function fetchDay(date) {
+  if (!DAYDATA[date]) {
+    try { DAYDATA[date] = await (await fetch(`${DATA_BASE}days/${date.replaceAll("-", "")}.json`)).json(); }
+    catch (e) { DAYDATA[date] = []; }
+  }
+  return DAYDATA[date];
+}
+async function loadDay(date) {
+  curDay = date;
+  $("#tbody").innerHTML = `<tr><td colspan="8" class="empty">불러오는 중…</td></tr>`;
+  await fetchDay(date);
+  renderDays(); renderTable();
+}
+let DAYLIST = [];
+function renderTable() {
+  const rows = dayRows(curDay), info = META.days.find(d => d.date === curDay);
+  $("#typesum").innerHTML = Object.entries(info.byType).map(([k, v]) =>
+    `<span><i class="sw" style="background:${TYPE_COLOR[k] || "var(--muted)"}"></i>${esc(k)} <b>${v}</b></span>`).join("")
+    + `<span>추천 기준 통과 <b style="color:var(--accent)">${rows.filter(b => b.score != null).length}</b></span>`;
+  fillSelect($("#dt"), [...new Set(rows.map(b => b.bsnsDivNm || "기타"))].sort());
+  const q = $("#dq").value.trim().toLowerCase(), t = $("#dt").value, only = $("#donly").checked;
+  const list = rows.filter(b => match(b, q) && (!t || b.bsnsDivNm === t) && (!only || b.score != null));
+  const key = { score: b => -(b.score ?? -1), budget: b => -(+b.asignBdgtAmt || 0), close: b => b.bidClseDate || "9" }[sortKey];
+  list.sort((a, b) => { const x = key(a), y = key(b); return x < y ? -1 : x > y ? 1 : 0; });
+  DAYLIST = list;
+  $("#dcount").textContent = `${list.length} / ${rows.length}건`;
+  $("#tbody").innerHTML = list.length ? list.map((b, i) => `
+    <tr class="row ${b.score == null ? "dim" : ""}" data-i="${i}">
+      <td>${b.score != null ? `<span class="sc">${b.score}</span>` : ""}</td>
+      <td>${esc(b.bidNtceNm)}${b.bidNtceSttusNm && b.bidNtceSttusNm !== "일반공고" ? ` <span class="chip">${esc(b.bidNtceSttusNm)}</span>` : ""}</td>
+      <td style="white-space:nowrap">${esc(b.bsnsDivNm)}</td>
+      <td>${esc(b.ntceInsttNm)}</td>
+      <td class="n">${won(b.asignBdgtAmt)}</td>
+      <td class="d">${esc((b.bidClseDate || "").slice(5))} ${esc(b.bidClseTm)}</td>
+      <td>${esc(b.cntrctCnclsMthdNm)}</td>
+      <td><a class="out" href="${esc(b.bidNtceUrl)}" target="_blank" rel="noopener">공고 ↗</a></td>
+    </tr>`).join("") : `<tr><td colspan="8" class="empty">조건에 맞는 공고가 없습니다.</td></tr>`;
+}
+function onRowClick(e) {
+  const tr = e.target.closest("tr.row"); if (!tr || e.target.closest("a")) return;
+  const open = tr.nextElementSibling?.classList.contains("detail");
+  document.querySelectorAll("tr.detail").forEach(x => x.remove());
+  document.querySelectorAll("tr.row.on").forEach(x => x.classList.remove("on"));
+  if (open) return;
+  const b = DAYLIST[+tr.dataset.i]; tr.classList.add("on");
+  const f = [["공고번호", `${b.bidNtceNo}-${b.bidNtceOrd}`], ["수요기관", b.dmndInsttNm], ["낙찰방법", b.bidwinrDcsnMthdNm],
+    ["추정가격", won(b.presmptPrce)], ["참가등록마감", `${b.bidPrtcptQlfctRgstClseDate} ${b.bidPrtcptQlfctRgstClseTm}`],
+    ["개찰", `${b.opengDate} ${b.opengTm}`], ["지역제한", b.rgnLmtYn === "Y" ? (b.prtcptPsblRgnNm || "있음") : "없음"],
+    ["업종제한", b.indstrytyLmtYn === "Y" ? (b.bidprcPsblIndstrytyNm || "있음") : "없음"],
+    ["판정", (b.why || []).map(w => (w.g ? w.g + ": " : "") + w.t).join(" / ") || "기준에 맞는 키워드 없음"]];
+  tr.insertAdjacentHTML("afterend", `<tr class="detail"><td colspan="8"><dl class="dl">${f.map(([k, v]) =>
+    `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl></td></tr>`);
+}
+
+/* ---------- 추천 기준 편집 ---------- */
+const splitIn = v => v.split(/[,\n\t]+/).map(x => x.trim()).filter(Boolean);
+function chipList(arr, path, cls = "") {
+  return arr.map((k, i) => `<span class="kchip ${cls}">${esc(k)}<button type="button" aria-label="${esc(k)} 삭제" data-del="${path}" data-i="${i}">×</button></span>`).join("")
+    || `<span class="hint">비어 있음</span>`;
+}
+function renderCrit() {
+  const d = DRAFT;
+  $("#groups").innerHTML = (d.keyword_groups || []).map((g, gi) => `
+    <div class="cbox">
+      <h3><input value="${esc(g.name)}" data-gname="${gi}" aria-label="그룹 이름"><span class="chip">${g.keywords.length}개</span>
+        <button class="btn danger" type="button" data-gdel="${gi}">그룹 삭제</button></h3>
+      <div class="chips">${chipList(g.keywords, "g" + gi)}</div>
+      <div class="addrow"><input id="gin${gi}" data-gin="${gi}" placeholder="키워드 입력 후 Enter (쉼표로 여러 개)"><button class="btn" type="button" data-gadd="${gi}">추가</button></div>
+    </div>`).join("");
+  $("#agencies").innerHTML = chipList(d.agencies || [], "agencies", "ag");
+  $("#regions").innerHTML = chipList(d.regions || [], "regions", "ag");
+  $("#excl").innerHTML = chipList(d.exclude_keywords || [], "exclude_keywords", "ag");
+  $("#types").innerHTML = TYPES.map(t => `<label><input type="checkbox" value="${t}" ${(d.business_types || []).includes(t) ? "checked" : ""}> ${t}</label>`).join("");
+  $("#minB").value = Math.round((d.min_budget || 0) / 1e4); $("#maxB").value = Math.round((d.max_budget || 0) / 1e4);
+  $("#minD").value = d.min_days_to_deadline ?? 1;
+  draftChanged(false);
+}
+function draftChanged(rerender = true) {
+  if (rerender) renderCrit();
+  const dirty = JSON.stringify(DRAFT) !== JSON.stringify(SAVED);
+  const n = computeRecs(DRAFT).length;
+  $("#save").disabled = !dirty || !CAN_SAVE; $("#reset").disabled = !dirty;
+  const m = $("#smsg"); m.classList.remove("err");
+  m.innerHTML = `이 기준이면 진행 중인 공고 중 <b>${n}</b>건을 추천합니다.` + (dirty ? (CAN_SAVE ? " 저장하지 않은 변경이 있습니다." : " 이 화면에서 저장할 권한이 없어 미리보기만 됩니다.") : "");
+  CRIT = DRAFT; refreshAll();
+}
+function getArr(path) {
+  if (path.startsWith("g")) return DRAFT.keyword_groups[+path.slice(1)].keywords;
+  return (DRAFT[path] = DRAFT[path] || []);
+}
+function addTo(path, inputEl) {
+  const arr = getArr(path), vals = splitIn(inputEl.value).filter(v => !arr.includes(v));
+  if (!vals.length) return;
+  arr.push(...vals); inputEl.value = ""; draftChanged();
+  const again = path.startsWith("g") ? $("#gin" + path.slice(1)) : inputEl; again?.focus();
+}
+function bindCrit() {
+  const p = $("#p-crit");
+  p.addEventListener("click", e => {
+    const t = e.target;
+    if (t.dataset.del) { getArr(t.dataset.del).splice(+t.dataset.i, 1); draftChanged(); }
+    else if (t.dataset.gadd) addTo("g" + t.dataset.gadd, $("#gin" + t.dataset.gadd));
+    else if (t.dataset.gdel) { DRAFT.keyword_groups.splice(+t.dataset.gdel, 1); draftChanged(); }
+  });
+  p.addEventListener("keydown", e => {
+    if (e.key !== "Enter" || e.isComposing) return;
+    const t = e.target;
+    if (t.dataset.gin) { e.preventDefault(); addTo("g" + t.dataset.gin, t); }
+    else if (t.id === "agIn") { e.preventDefault(); addTo("agencies", t); }
+    else if (t.id === "rgIn") { e.preventDefault(); addTo("regions", t); }
+    else if (t.id === "exIn") { e.preventDefault(); addTo("exclude_keywords", t); }
+  });
+  p.addEventListener("change", e => {
+    const t = e.target;
+    if (t.dataset.gname) { DRAFT.keyword_groups[+t.dataset.gname].name = t.value.trim() || "이름 없음"; draftChanged(); }
+    else if (t.closest("#types")) { DRAFT.business_types = [...document.querySelectorAll("#types input:checked")].map(x => x.value); draftChanged(false); }
+    else if (t.id === "minB") { DRAFT.min_budget = Math.max(0, +t.value || 0) * 1e4; draftChanged(false); }
+    else if (t.id === "maxB") { DRAFT.max_budget = Math.max(0, +t.value || 0) * 1e4; draftChanged(false); }
+    else if (t.id === "minD") { DRAFT.min_days_to_deadline = Math.max(0, +t.value || 0); draftChanged(false); }
+  });
+  $("#agAdd").onclick = () => addTo("agencies", $("#agIn"));
+  $("#rgAdd").onclick = () => addTo("regions", $("#rgIn"));
+  $("#exAdd").onclick = () => addTo("exclude_keywords", $("#exIn"));
+  $("#addGroup").onclick = () => { DRAFT.keyword_groups.push({ name: "새 그룹", keywords: [] }); draftChanged(); $("#gin" + (DRAFT.keyword_groups.length - 1))?.focus(); };
+  $("#reset").onclick = () => { DRAFT = clone(SAVED); draftChanged(); };
+  $("#save").onclick = save;
+}
+async function save() {
+  const m = $("#smsg");
+  if (!DB) { m.textContent = "저장소에 연결되지 않아 저장하지 못했습니다. 잠시 뒤 다시 열어 주세요."; m.classList.add("err"); return; }
+  $("#save").disabled = true; m.textContent = "저장 중…";
+  const body = { ...clone(DRAFT), updated_at: new Date().toISOString() };
+  try {
+    await DB.doc("settings/criteria").set(body);
+    SAVED = clone(DRAFT); draftChanged(false);
+    m.innerHTML = `저장했습니다. 다음 아침 수집부터 이 기준으로 추천합니다.`;
+  } catch (e) {
+    if (e?.code === "invalid_argument") { CAN_SAVE = false; m.textContent = "이 화면에서 기준을 저장할 권한이 없습니다. 소유자에게 요청해 주세요."; }
+    else m.textContent = "저장하지 못했습니다. 잠시 뒤 다시 눌러 주세요.";
+    m.classList.add("err"); $("#save").disabled = !CAN_SAVE;
+  }
+}
+async function connectDb() {
+  const db = window.claude?.use ? await window.claude.use("db").catch(() => null) : null;
+  if (!db) return;
+  DB = db;
+  const user = await window.claude.use("user").catch(() => null);
+  if (user) { try { const w = await user.can("data.write"); if (w === false) CAN_SAVE = false; } catch (e) {} }
+  db.doc("settings/criteria").onSnapshot(snap => {
+    if (!snap.exists) return;
+    const { updated_at, ...c } = snap.data();
+    const fresh = clone(c);
+    const wasDirty = JSON.stringify(DRAFT) !== JSON.stringify(SAVED);
+    SAVED = fresh;
+    if (!wasDirty) { DRAFT = clone(fresh); }
+    renderCrit(); CRIT = DRAFT; refreshAll();
+  }, () => {});
+}
+
+/* ---------- 탭 · 시작 ---------- */
+function setTab(name) {
+  for (const [id, pid] of [["rec", "p-rec"], ["day", "p-day"], ["crit", "p-crit"]]) {
+    $("#tab-" + id).setAttribute("aria-selected", id === name); $("#" + pid).hidden = id !== name;
+  }
+  try { localStorage.setItem("tab", name); } catch (e) {}
+  if (name === "day" && !curDay && META.days.length) loadDay(META.days[0].date);
+}
+async function init() {
+  try { META = await (await fetch(DATA_BASE + "index.json", { cache: "no-cache" })).json(); }
+  catch (e) {
+    $("#gen").textContent = "";
+    $("#stats").outerHTML = `<div class="empty">아직 데이터가 없습니다. <code>python3 nara_bids.py daily</code> 를 실행하면 이 화면이 채워집니다.</div>`;
+    return;
+  }
+  SAVED = clone(META.criteria || {}); SAVED.keyword_groups = SAVED.keyword_groups || []; DRAFT = clone(SAVED); CRIT = DRAFT;
+  $("#gen").textContent = `갱신 ${META.generated.replace("T", " ")}`;
+  if (META.sample) {
+    $("#banner").hidden = false;
+    $("#banner").innerHTML = `지금은 화면 확인용 <b>가상 샘플 공고</b>입니다. 실제 나라장터 공고가 아닙니다. 추천 기준은 보내주신 키워드로 설정돼 있습니다.`;
+  }
+  await Promise.all(META.days.slice(0, RECENT_DAYS).map(d => fetchDay(d.date)));
+  bindCrit(); renderCrit(); refreshAll();
+  ["#rq", "#rg", "#rt", "#rsoon"].forEach(s => $(s).addEventListener("input", renderRecs));
+  ["#dq", "#dt", "#donly"].forEach(s => $(s).addEventListener("input", renderTable));
+  $("#tbody").addEventListener("click", onRowClick);
+  $("#days").addEventListener("click", e => { const b = e.target.closest(".day"); if (b) loadDay(b.dataset.d); });
+  document.querySelectorAll("th button").forEach(b => b.addEventListener("click", () => { sortKey = b.dataset.k; renderTable(); }));
+  ["rec", "day", "crit"].forEach(n => $("#tab-" + n).onclick = () => setTab(n));
+  // 공개 사이트(claude.ai 밖)에서는 기준 저장소가 없으니 '추천 기준' 탭을 숨김
+  const TABS = window.claude?.use ? ["rec", "day", "crit"] : ["rec", "day"];
+  if (TABS.length === 2) $("#tab-crit").hidden = true;
+  let t = null; try { t = localStorage.getItem("tab"); } catch (e) {}
+  const h = location.hash.slice(1);
+  setTab(TABS.includes(h) ? h : TABS.includes(t) ? t : "rec");
+  connectDb();
+}
+init();
+</script>

@@ -41,6 +41,10 @@
 │   ├── 05-hero-4.md              Renewal_4 (4안) 적용 내용
 │   └── 06-hero-3part.md          Renewal_3 (3-1안) · Renewal_5 (5안) 적용 내용
 │
+├── nara/            나라장터 입찰공고 추천 화면 (https://victex-hr.github.io/homepage/nara/)
+│   ├── index.html   공개 화면 · admin/ 관리 화면 (로그인)
+│   └── bot/         수집·엑셀·메일 발송 코드, Supabase 스키마, 설정 안내(README)
+│
 └── tools/
     ├── mirror.py        현행 사이트 → original/ 복제 스크립트
     ├── silk_svg.py      실크 물결 배경 SVG 생성 (Renewal_3·4·5)

@@ -1,0 +1,52 @@
+# NARA · 나라장터 입찰공고 자동 조회
+
+홈페이지 저장소의 `nara/` 폴더입니다. 화면은 `nara/index.html`, `nara/admin/`, 수집·발송 코드는 `nara/bot/` 에 있습니다.
+
+- **공개 화면**: `https://victex-hr.github.io/homepage/nara/`. 로그인 없이 열립니다 (추천 공고 / 일일 정리).
+- **관리 화면**: `https://victex-hr.github.io/homepage/nara/admin/`. 별도로 로그인하며, 가입자 승인과 발송 일정·메일 수신자를 관리합니다.
+- **엑셀 메일**: 정한 요일·시각(한국시간)에 **전날 공고** 엑셀을 수신자에게 보냅니다.
+  엑셀은 추천 공고, 진행 중 추천 전체, 전체 공고 세 개 시트로 되어 있습니다.
+
+## 동작 방식
+GitHub Actions(저장소 루트 `.github/workflows/nara.yml`)가 매시간 `nara/bot` 에서 `python nara.py tick` 을 실행합니다.
+1. 오늘(한국시간) 아직 갱신하지 않았으면 최근 3일 공고를 다시 받아 공개 화면 데이터를 갱신합니다 (최근 30일 보관).
+2. Supabase에 저장된 발송 일정 중 시각이 된 것이 있으면 엑셀을 만들어 메일로 보내고, 결과를 발송 기록에 남깁니다.
+   예정 시각부터 3시간 안에 실행되면 보냅니다. 하루에 한 번만 보냅니다.
+3. 공고 데이터는 `nara-data` 브랜치에 덮어써서 올립니다. 홈페이지 이력에 데이터가 쌓이지 않고, 화면은 이 브랜치에서 데이터를 읽습니다.
+
+추천 기준(키워드 그룹·발주처·제외어 등)은 `nara/bot/config.json` 에 있습니다. 형식과 점수 규칙은 아래와 같습니다.
+- 키워드는 대소문자를 무시합니다. `^` 로 시작하면 단어 첫머리에서만 일치합니다(`^고리`). 4자 이하 영문 약어는 앞뒤가 영문자가 아닐 때만 일치합니다.
+- 그룹별로 공고명에 있으면 30점, 키워드가 더 있으면 하나에 10점씩 최대 20점을 더합니다. 투찰가능업종에만 있으면 10점, 발주처가 일치하면 20점입니다.
+
+## 처음 설정 순서
+1. **Supabase**: 프로젝트를 만든 뒤 SQL Editor 에 `nara/bot/schema.sql` 을 붙여넣고 Run 합니다.
+   Authentication > URL Configuration 의 Site URL 에 `https://victex-hr.github.io/homepage/nara/admin/` 을 넣습니다.
+2. **GitHub 저장소 Settings > Secrets and variables > Actions**
+   - Variables: `SUPABASE_URL`, `SUPABASE_ANON_KEY` (Supabase > Project Settings > API 의 URL 과 anon public 키)
+   - Secrets: `SUPABASE_SERVICE_KEY` (같은 화면의 service_role 키), `NARA_API_KEY`,
+     `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM`
+     - Gmail 예: `smtp.gmail.com` / `465` / 계정 주소 / 앱 비밀번호 / 계정 주소
+3. Actions 탭에서 `NARA 입찰공고 수집·메일 발송` 을 한 번 수동 실행(Run workflow)합니다.
+4. 관리 화면에서 **가장 먼저 가입한 사람이 관리자**가 됩니다. 이후 가입자는 관리자가 '가입자' 탭에서 승인합니다.
+
+## 메일 발송 계정
+- **Gmail**: 2단계 인증을 켠 뒤 Google 계정 > 보안 > 앱 비밀번호에서 16자리 비밀번호를 만들어 `SMTP_PASSWORD` 에 넣습니다.
+  `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=465`. 하루 발송 한도는 약 500통입니다.
+- **회사 메일**: 메일 서버의 SMTP 주소·포트(465 SSL 또는 587 STARTTLS)·계정·비밀번호를 넣습니다.
+  해외(GitHub 서버)에서 로그인하는 것을 막는 메일 서비스는 해외 접속 허용이 필요합니다.
+- 보내는 주소(`MAIL_FROM`)는 로그인 계정과 같은 주소로 두는 것이 스팸 분류를 피하기 좋습니다.
+
+## 수동 실행
+```
+cd nara/bot
+pip install openpyxl
+python nara.py update-site --days-back 3   # 공고 수집 + nara/data 갱신
+python nara.py excel --date 20261012       # out/ 에 엑셀 생성
+python nara.py send-test --to a@b.com      # 어제 엑셀 시험 발송
+```
+
+## 참고
+- 데이터: 조달청 나라장터 공공데이터개방표준서비스 `getDataSetOpnStdBidPblancInfo` (data.go.kr 15058815).
+- 한 번에 많이 받으면 페이지가 밀려 공고가 빠지고 연결도 자주 끊겨서, 1시간 단위로 나눠 100건씩 받고 빠지면 다시 받습니다.
+- 공개 화면은 주소를 아는 누구나 볼 수 있으므로 `config.json` 의 키워드와 발주처도 공개됩니다.
+- 가입자를 삭제하면 관리 화면에 들어올 수 없게 됩니다. 로그인 계정 자체는 Supabase > Authentication 에서 지울 수 있습니다.

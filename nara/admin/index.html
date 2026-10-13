@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>NARA 관리</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+:root {
+  --bg: #f4f6f8; --surface: #ffffff; --line: #dde3e9; --fg: #16202a; --muted: #5b6875;
+  --accent: #0b6b63; --accent-soft: #e2f1ef; --danger: #b8322a; --danger-soft: #fbe9e7;
+  --warn: #9a6512; --warn-soft: #fbf1df; --chip: #eef1f4;
+  --sans: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f1419; --surface: #161d25; --line: #26313c; --fg: #e5eaef; --muted: #93a0ad;
+  --accent: #46b8a8; --accent-soft: #15302d; --danger: #f0776b; --danger-soft: #3a1c1a;
+  --warn: #e0b061; --warn-soft: #332713; --chip: #1f2831; color-scheme: dark; } }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.55 var(--sans); }
+.wrap { max-width: 980px; margin: 0 auto; padding: 20px 16px 48px; display: grid; gap: 18px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
+h1 { font-size: 22px; margin: 0; }
+h2 { font-size: 16px; margin: 0; }
+.sub { color: var(--muted); font-size: 13px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 12px; min-width: 0; }
+.auth { max-width: 380px; margin: 8vh auto 0; width: 100%; }
+label.f { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+input[type=text], input[type=email], input[type=password], input[type=time], select {
+  font: 14px var(--sans); color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; min-width: 0; width: 100%; }
+input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn { appearance: none; font: 600 14px var(--sans); border-radius: 8px; padding: 8px 14px; cursor: pointer; border: 1px solid var(--line); background: var(--surface); color: var(--fg); white-space: nowrap; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.btn.link { border: 0; background: none; color: var(--accent); padding: 4px 0; }
+.btn.danger { border-color: transparent; background: none; color: var(--danger); padding: 6px 8px; }
+.btn:disabled { opacity: .5; cursor: default; }
+.msg { font-size: 13.5px; color: var(--muted); min-height: 1.2em; }
+.msg.err { color: var(--danger); }
+.msg.ok { color: var(--accent); }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.tab { appearance: none; border: 0; background: none; color: var(--muted); font: 600 15px var(--sans); padding: 10px 14px;
+  border-bottom: 2px solid transparent; margin-bottom: -1px; cursor: pointer; white-space: nowrap; }
+.tab[aria-selected="true"] { color: var(--fg); border-color: var(--accent); }
+.list { display: grid; gap: 10px; }
+.row { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px 12px; align-items: end; }
+.row.off { opacity: .65; }
+.days { display: flex; flex-wrap: wrap; gap: 4px; }
+.days label { display: inline-grid; place-items: center; width: 34px; height: 32px; border: 1px solid var(--line); border-radius: 6px; cursor: pointer; font-size: 13px; color: var(--muted); }
+.days input { position: absolute; opacity: 0; pointer-events: none; }
+.days label:has(input:checked) { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); font-weight: 600; }
+.days label:has(input:focus-visible) { outline: 2px solid var(--accent); }
+.tog { display: inline-flex; gap: 6px; align-items: center; font-size: 14px; }
+.meta { font-size: 12.5px; color: var(--muted); }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.add { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px 12px; align-items: end; }
+.pill { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--chip); color: var(--muted); }
+.pill.ok { background: var(--accent-soft); color: var(--accent); }
+.pill.bad { background: var(--danger-soft); color: var(--danger); }
+.pill.wait { background: var(--warn-soft); color: var(--warn); }
+.tablebox { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 620px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; color: var(--muted); font-weight: 600; }
+.empty { color: var(--muted); padding: 20px; text-align: center; }
+.note { font-size: 13px; color: var(--muted); margin: 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>NARA 관리</h1>
+    <div class="sub" id="who"></div>
+  </header>
+
+  <!-- 로그인 / 가입 -->
+  <section class="card auth" id="authBox" hidden>
+    <nav class="tabs" role="tablist">
+      <button class="tab" role="tab" aria-selected="true" data-mode="in">로그인</button>
+      <button class="tab" role="tab" aria-selected="false" data-mode="up">가입 신청</button>
+    </nav>
+    <form id="authForm" class="list">
+      <label class="f" id="nameRow" hidden>이름<input type="text" id="aName" autocomplete="name"></label>
+      <label class="f">이메일<input type="email" id="aEmail" required autocomplete="email"></label>
+      <label class="f">비밀번호<input type="password" id="aPw" required minlength="8" autocomplete="current-password"></label>
+      <button class="btn primary" id="aBtn" type="submit">로그인</button>
+      <div class="msg" id="aMsg" role="status"></div>
+      <button class="btn link" type="button" id="forgot">비밀번호를 잊으셨나요?</button>
+    </form>
+  </section>
+
+  <!-- 승인 대기 -->
+  <section class="card auth" id="waitBox" hidden>
+    <h2>승인을 기다리고 있습니다</h2>
+    <p class="note">관리자가 가입을 승인하면 이 화면에서 발송 일정과 수신자를 볼 수 있습니다.</p>
+    <button class="btn" type="button" data-logout>로그아웃</button>
+  </section>
+
+  <!-- 새 비밀번호 -->
+  <section class="card auth" id="pwBox" hidden>
+    <h2>새 비밀번호 설정</h2>
+    <form id="pwForm" class="list">
+      <label class="f">새 비밀번호 (8자 이상)<input type="password" id="newPw" required minlength="8" autocomplete="new-password"></label>
+      <button class="btn primary" type="submit">저장</button>
+      <div class="msg" id="pwMsg" role="status"></div>
+    </form>
+  </section>
+
+  <!-- 관리 화면 -->
+  <section id="app" hidden style="display:grid;gap:16px">
+    <nav class="tabs" role="tablist">
+      <button class="tab" role="tab" aria-selected="true" data-tab="sched">발송 일정</button>
+      <button class="tab" role="tab" aria-selected="false" data-tab="rcpt">메일 수신자</button>
+      <button class="tab" role="tab" aria-selected="false" data-tab="users">가입자</button>
+      <button class="tab" role="tab" aria-selected="false" data-tab="log">발송 기록</button>
+    </nav>
+    <div class="msg" id="msg" role="status"></div>
+
+    <div data-panel="sched" class="list">
+      <p class="note">매 시간 확인해서 정한 요일·시각(한국시간)이 되면 <b>전날 공고</b> 엑셀을 활성 수신자 모두에게 보냅니다. 실제 발송은 정한 시각부터 1시간 안에 이뤄집니다.</p>
+      <div class="list" id="schedList"></div>
+      <form class="card add" id="schedAdd" data-admin>
+        <label class="f">일정 이름<input type="text" id="sName" placeholder="예: 평일 아침" required></label>
+        <label class="f">시각<input type="time" id="sTime" value="08:00" step="3600" required></label>
+        <div class="f"><span class="meta">요일</span><div class="days" id="sDays"></div></div>
+        <button class="btn primary" type="submit">일정 추가</button>
+      </form>
+    </div>
+
+    <div data-panel="rcpt" class="list" hidden>
+      <div class="list" id="rcptList"></div>
+      <form class="card add" id="rcptAdd" data-admin>
+        <label class="f">이메일 (쉼표로 여러 개)<input type="text" id="rEmail" placeholder="name@victex.co.kr" required></label>
+        <label class="f">이름 (선택)<input type="text" id="rName"></label>
+        <button class="btn primary" type="submit">수신자 추가</button>
+      </form>
+    </div>
+
+    <div data-panel="users" class="list" hidden>
+      <p class="note">가입 신청한 사람을 승인하면 이 관리 화면에 들어올 수 있습니다. 관리자는 일정·수신자·가입자를 바꿀 수 있고, 일반 회원은 보기만 합니다.</p>
+      <div class="list" id="userList"></div>
+    </div>
+
+    <div data-panel="log" hidden class="card tablebox">
+      <table><thead><tr><th>보낸 시각</th><th>일정</th><th>공고일</th><th>결과</th><th>수신자</th></tr></thead>
+      <tbody id="logBody"></tbody></table>
+    </div>
+  </section>
+
+  <section class="card auth" id="cfgBox" hidden>
+    <h2>설정이 아직 없습니다</h2>
+    <p class="note">Supabase 주소와 공개 키가 아직 등록되지 않았습니다. nara/bot/README.md 의 설정 순서를 따라 주세요.</p>
+  </section>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const DAYN = ["월", "화", "수", "목", "금", "토", "일"];
+const DATA_BASE = location.hostname.endsWith("github.io")
+  ? "https://raw.githubusercontent.com/Victex-HR/homepage/nara-data/" : "../data/";
+let CFG = {};
+let sb, me = null, prof = null, isAdmin = false, mode = "in";
+
+function show(id) { ["authBox", "waitBox", "pwBox", "app", "cfgBox"].forEach(x => $("#" + x).hidden = x !== id); }
+function say(t, cls = "", el = "#msg") { const m = $(el); m.textContent = t; m.className = "msg " + cls; }
+function fmt(ts) { return ts ? new Date(ts).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "short", timeStyle: "short" }) : "-"; }
+function daysHtml(sel, name) {
+  return DAYN.map((d, i) => `<label title="${d}요일"><input type="checkbox" name="${name}" value="${i + 1}" ${sel.includes(i + 1) ? "checked" : ""} ${isAdmin ? "" : "disabled"}>${d}</label>`).join("");
+}
+async function run(p, okText) {
+  const { error, data } = await p;
+  if (error) { say(error.message.includes("row-level security") ? "권한이 없습니다." : "오류: " + error.message, "err"); throw error; }
+  if (okText) say(okText, "ok");
+  return data;
+}
+
+/* ---------- 로그인 ---------- */
+function setMode(m) {
+  mode = m;
+  $$("#authBox .tab").forEach(t => t.setAttribute("aria-selected", t.dataset.mode === m));
+  $("#nameRow").hidden = m !== "up";
+  $("#aBtn").textContent = m === "up" ? "가입 신청" : "로그인";
+  $("#aPw").autocomplete = m === "up" ? "new-password" : "current-password";
+  say("", "", "#aMsg");
+}
+async function onAuth(e) {
+  e.preventDefault();
+  const email = $("#aEmail").value.trim(), password = $("#aPw").value;
+  $("#aBtn").disabled = true;
+  try {
+    if (mode === "up") {
+      const { data, error } = await sb.auth.signUp({ email, password, options: { data: { name: $("#aName").value.trim() }, emailRedirectTo: location.href.split("#")[0] } });
+      if (error) throw error;
+      say(data.session ? "가입했습니다." : "확인 메일을 보냈습니다. 메일의 링크를 누른 뒤 로그인해 주세요.", "ok", "#aMsg");
+    } else {
+      const { error } = await sb.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+    }
+  } catch (err) {
+    say(/Invalid login/.test(err.message) ? "이메일이나 비밀번호가 맞지 않습니다." : /confirm/i.test(err.message) ? "메일 인증을 먼저 해 주세요." : err.message, "err", "#aMsg");
+  } finally { $("#aBtn").disabled = false; }
+}
+async function onForgot() {
+  const email = $("#aEmail").value.trim();
+  if (!email) return say("이메일을 먼저 입력해 주세요.", "err", "#aMsg");
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.href.split("#")[0] });
+  say(error ? error.message : "비밀번호 재설정 메일을 보냈습니다.", error ? "err" : "ok", "#aMsg");
+}
+
+/* ---------- 화면 ---------- */
+async function enter(session) {
+  me = session?.user || null;
+  if (!me) { $("#who").textContent = ""; return show("authBox"); }
+  const { data } = await sb.from("profiles").select("*").eq("id", me.id).maybeSingle();
+  prof = data; isAdmin = !!(prof && prof.approved && prof.role === "admin");
+  $("#who").innerHTML = `${esc(prof?.name || me.email)} · ${isAdmin ? "관리자" : "회원"} · <button class="btn link" type="button" data-logout>로그아웃</button>`;
+  if (!prof || !prof.approved) return show("waitBox");
+  show("app");
+  $$("[data-admin]").forEach(x => x.hidden = !isAdmin);
+  $("#sDays").innerHTML = daysHtml([1, 2, 3, 4, 5, 6, 7], "newday");
+  loadAll();
+}
+function setTab(t) {
+  $$("#app .tab").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === t));
+  $$("[data-panel]").forEach(p => p.hidden = p.dataset.panel !== t);
+  try { localStorage.setItem("naraAdminTab", t); } catch (e) {}
+}
+async function loadAll() { await Promise.all([loadSched(), loadRcpt(), loadUsers(), loadLog()]); }
+
+async function loadSched() {
+  const rows = await run(sb.from("schedules").select("*").order("send_time"));
+  $("#schedList").innerHTML = rows.length ? rows.map(s => `
+    <div class="row ${s.active ? "" : "off"}" data-id="${s.id}">
+      <label class="f">이름<input type="text" data-f="name" value="${esc(s.name)}" ${isAdmin ? "" : "disabled"}></label>
+      <label class="f">시각<input type="time" data-f="send_time" value="${esc(s.send_time.slice(0, 5))}" step="3600" ${isAdmin ? "" : "disabled"}></label>
+      <div class="f"><span class="meta">요일</span><div class="days">${daysHtml(s.weekdays || [], "d" + s.id)}</div></div>
+      <div style="display:grid;gap:6px">
+        <label class="tog"><input type="checkbox" data-f="active" ${s.active ? "checked" : ""} ${isAdmin ? "" : "disabled"}> 사용</label>
+        <span class="meta">마지막 발송 <span class="mono">${esc(s.last_sent_on || "-")}</span></span>
+      </div>
+      ${isAdmin ? `<div><button class="btn danger" type="button" data-del="schedules">삭제</button></div>` : ""}
+    </div>`).join("") : `<div class="empty">발송 일정이 없습니다.</div>`;
+}
+async function loadRcpt() {
+  const rows = await run(sb.from("recipients").select("*").order("created_at"));
+  $("#rcptList").innerHTML = rows.length ? rows.map(r => `
+    <div class="row ${r.active ? "" : "off"}" data-id="${r.id}">
+      <label class="f">이메일<input type="email" data-f="email" value="${esc(r.email)}" ${isAdmin ? "" : "disabled"}></label>
+      <label class="f">이름<input type="text" data-f="name" value="${esc(r.name)}" ${isAdmin ? "" : "disabled"}></label>
+      <label class="tog"><input type="checkbox" data-f="active" ${r.active ? "checked" : ""} ${isAdmin ? "" : "disabled"}> 받기</label>
+      ${isAdmin ? `<div><button class="btn danger" type="button" data-del="recipients">삭제</button></div>` : ""}
+    </div>`).join("") : `<div class="empty">수신자가 없습니다.</div>`;
+}
+async function loadUsers() {
+  const rows = await run(sb.from("profiles").select("*").order("created_at"));
+  $("#userList").innerHTML = rows.map(u => `
+    <div class="row ${u.approved ? "" : "off"}" data-id="${u.id}">
+      <div><b>${esc(u.name || "(이름 없음)")}</b><div class="meta">${esc(u.email)} · 가입 ${fmt(u.created_at)}</div></div>
+      <label class="f">권한<select data-f="role" ${isAdmin && u.id !== me.id ? "" : "disabled"}>
+        <option value="member" ${u.role === "member" ? "selected" : ""}>회원 (보기만)</option>
+        <option value="admin" ${u.role === "admin" ? "selected" : ""}>관리자</option></select></label>
+      <label class="tog"><input type="checkbox" data-f="approved" ${u.approved ? "checked" : ""} ${isAdmin && u.id !== me.id ? "" : "disabled"}> 승인</label>
+      <div>${u.approved ? `<span class="pill ok">사용 중</span>` : `<span class="pill wait">승인 대기</span>`}
+        ${isAdmin && u.id !== me.id ? `<button class="btn danger" type="button" data-del="profiles">삭제</button>` : ""}</div>
+    </div>`).join("") || `<div class="empty">가입자가 없습니다.</div>`;
+}
+async function loadLog() {
+  const [rows, scheds] = await Promise.all([
+    run(sb.from("send_log").select("*").order("sent_at", { ascending: false }).limit(50)),
+    run(sb.from("schedules").select("id,name"))]);
+  const nm = Object.fromEntries(scheds.map(s => [s.id, s.name]));
+  $("#logBody").innerHTML = rows.length ? rows.map(l => `<tr>
+    <td class="mono">${fmt(l.sent_at)}</td><td>${esc(nm[l.schedule_id] || "-")}</td><td class="mono">${esc(l.report_date || "")}</td>
+    <td><span class="pill ${l.status === "sent" ? "ok" : "bad"}">${l.status === "sent" ? "보냄" : "실패"}</span> <span class="meta">${esc(l.detail)}</span></td>
+    <td class="meta">${esc((l.recipients || []).join(", "))}</td></tr>`).join("")
+    : `<tr><td colspan="5" class="empty">아직 보낸 기록이 없습니다.</td></tr>`;
+}
+
+/* ---------- 편집 ---------- */
+const TABLE = { schedList: "schedules", rcptList: "recipients", userList: "profiles" };
+async function onChange(e) {
+  const row = e.target.closest(".row[data-id]"); if (!row || !isAdmin) return;
+  const table = TABLE[row.parentElement.id], id = row.dataset.id, t = e.target;
+  let patch = {};
+  if (t.name && t.name.startsWith("d")) patch.weekdays = $$(`input[name="${t.name}"]:checked`).map(x => +x.value);
+  else if (t.type === "checkbox") patch[t.dataset.f] = t.checked;
+  else patch[t.dataset.f] = t.value.trim();
+  if (patch.weekdays && !patch.weekdays.length) { t.checked = true; return say("요일을 하나 이상 골라 주세요.", "err"); }
+  if (patch.send_time) patch.last_sent_on = null;
+  await run(sb.from(table).update(patch).eq("id", id), "저장했습니다.");
+  if ("active" in patch || "approved" in patch) row.classList.toggle("off", !(patch.active ?? patch.approved));
+}
+async function onClick(e) {
+  if (e.target.closest("[data-logout]")) { await sb.auth.signOut(); return; }
+  const del = e.target.closest("[data-del]"); if (!del) return;
+  const row = del.closest(".row"), table = del.dataset.del;
+  if (!confirm("삭제할까요? 되돌릴 수 없습니다.")) return;
+  await run(sb.from(table).delete().eq("id", row.dataset.id), "삭제했습니다.");
+  row.remove();
+}
+async function addSched(e) {
+  e.preventDefault();
+  const weekdays = $$('input[name="newday"]:checked').map(x => +x.value);
+  if (!weekdays.length) return say("요일을 하나 이상 골라 주세요.", "err");
+  await run(sb.from("schedules").insert({ name: $("#sName").value.trim(), send_time: $("#sTime").value, weekdays }), "일정을 추가했습니다.");
+  $("#sName").value = ""; loadSched();
+}
+async function addRcpt(e) {
+  e.preventDefault();
+  const emails = $("#rEmail").value.split(/[,\s;]+/).map(x => x.trim()).filter(Boolean);
+  const bad = emails.filter(x => !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x));
+  if (bad.length) return say("이메일 형식을 확인해 주세요: " + bad.join(", "), "err");
+  await run(sb.from("recipients").upsert(emails.map(email => ({ email, name: $("#rName").value.trim(), active: true })), { onConflict: "email" }), `${emails.length}명을 추가했습니다.`);
+  $("#rEmail").value = ""; $("#rName").value = ""; loadRcpt();
+}
+
+/* ---------- 시작 ---------- */
+(async function init() {
+  try { CFG = await (await fetch(DATA_BASE + "admin-config.json", { cache: "no-cache" })).json(); } catch (e) {}
+  if (!CFG.supabaseUrl || !CFG.supabaseAnonKey || !window.supabase) return show("cfgBox");
+  sb = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey);
+  $$("#authBox .tab").forEach(t => t.onclick = () => setMode(t.dataset.mode));
+  $("#authForm").onsubmit = onAuth;
+  $("#forgot").onclick = onForgot;
+  $("#pwForm").onsubmit = async e => {
+    e.preventDefault();
+    const { error } = await sb.auth.updateUser({ password: $("#newPw").value });
+    say(error ? error.message : "바꿨습니다.", error ? "err" : "ok", "#pwMsg");
+    if (!error) enter((await sb.auth.getSession()).data.session);
+  };
+  $$("#app .tab").forEach(b => b.onclick = () => setTab(b.dataset.tab));
+  document.addEventListener("change", onChange);
+  document.addEventListener("click", onClick);
+  $("#schedAdd").onsubmit = addSched;
+  $("#rcptAdd").onsubmit = addRcpt;
+  let t = "sched"; try { t = localStorage.getItem("naraAdminTab") || t; } catch (e) {}
+  setTab(t);
+  sb.auth.onAuthStateChange((ev, session) => {
+    if (ev === "PASSWORD_RECOVERY") return show("pwBox");
+    if (ev === "SIGNED_IN" || ev === "SIGNED_OUT" || ev === "INITIAL_SESSION") enter(session);
+  });
+})();
+</script>
+</body>
+</html>
