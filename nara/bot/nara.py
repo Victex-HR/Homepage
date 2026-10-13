@@ -46,6 +46,14 @@ def now_kst():
 
 
 def load_cfg():
+    """추천 기준. Supabase(관리 화면에서 편집)에 있으면 그것을, 없으면 config.json 을 쓴다."""
+    if os.environ.get("SUPABASE_URL") and os.environ.get("SUPABASE_SERVICE_KEY"):
+        try:
+            rows = sb("GET", "settings?select=value&key=eq.criteria")
+            if rows and rows[0].get("value", {}).get("keyword_groups") is not None:
+                return rows[0]["value"]
+        except Exception as e:  # noqa: BLE001 - 저장소 문제면 파일 기준으로 계속
+            print(f"Supabase 기준을 읽지 못해 config.json 을 씀: {e}")
     return json.load(open(os.path.join(BASE, "config.json"), encoding="utf-8"))
 
 
@@ -335,6 +343,10 @@ def tick():
                 now - dt.datetime.fromisoformat(last).replace(tzinfo=KST) >= dt.timedelta(hours=TODAY_EVERY_H):
             update_site(only_today=True)    # 2시간마다 오늘 공고
             changed = True
+    # 관리 화면에서 기준을 바꾸면 수집 없이 점수만 다시 매겨 공개 화면에 반영
+    if not changed and meta and load_cfg() != meta.get("criteria"):
+        rebuild_index(load_cfg())
+        changed = True
     cfg_path = os.path.join(DATA, "admin-config.json")
     before = open(cfg_path).read() if os.path.exists(cfg_path) else ""
     write_admin_config()

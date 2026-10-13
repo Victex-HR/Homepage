@@ -69,6 +69,20 @@ th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--lin
 th { font-size: 12px; color: var(--muted); font-weight: 600; }
 .empty { color: var(--muted); padding: 20px; text-align: center; }
 .note { font-size: 13px; color: var(--muted); margin: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.kchip { display: inline-flex; align-items: center; gap: 2px; font-size: 13px; padding: 3px 4px 3px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
+.kchip.ex { background: var(--danger-soft); color: var(--danger); }
+.kchip.ag { background: var(--chip); color: var(--fg); }
+.kchip button { all: unset; cursor: pointer; width: 18px; height: 18px; display: grid; place-items: center; border-radius: 50%; font-size: 14px; line-height: 1; opacity: .7; }
+.kchip button:hover { opacity: 1; background: color-mix(in srgb, currentColor 15%, transparent); }
+.kchip button:focus-visible { outline: 2px solid var(--accent); }
+.addrow { display: flex; gap: 6px; flex-wrap: wrap; }
+.addrow input { flex: 1 1 220px; width: auto; }
+.ghead { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ghead input { font-weight: 600; flex: 1 1 160px; width: auto; }
+.savebar { position: sticky; bottom: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px;
+  display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); }
+.savebar .msg { flex: 1 1 220px; }
 </style>
 </head>
 <body>
@@ -114,14 +128,39 @@ th { font-size: 12px; color: var(--muted); font-weight: 600; }
   <!-- 관리 화면 -->
   <section id="app" hidden style="display:grid;gap:16px">
     <nav class="tabs" role="tablist">
-      <button class="tab" role="tab" aria-selected="true" data-tab="sched">발송 일정</button>
+      <button class="tab" role="tab" aria-selected="true" data-tab="crit">추천 기준</button>
+      <button class="tab" role="tab" aria-selected="false" data-tab="sched">발송 일정</button>
       <button class="tab" role="tab" aria-selected="false" data-tab="rcpt">메일 수신자</button>
       <button class="tab" role="tab" aria-selected="false" data-tab="users">가입자</button>
       <button class="tab" role="tab" aria-selected="false" data-tab="log">발송 기록</button>
     </nav>
     <div class="msg" id="msg" role="status"></div>
 
-    <div data-panel="sched" class="list">
+    <div data-panel="crit" class="list">
+      <p class="note">공고명에 키워드가 있으면 추천합니다. 대소문자는 구분하지 않고, 쉼표로 여러 개를 한 번에 넣을 수 있습니다.
+        앞에 <code>^</code>를 붙이면 단어 첫머리에서만 찾습니다(<code>^고리</code>). 제외 키워드가 공고명에 있으면 추천에서 뺍니다.
+        저장하면 다음 자동 실행(매시 정각 즈음)부터 공개 화면과 메일에 반영됩니다.</p>
+      <div class="list" id="groups"></div>
+      <div data-admin><button class="btn" type="button" id="addGroup">+ 키워드 그룹 추가</button></div>
+      <div class="card">
+        <h2>제외 키워드</h2>
+        <div class="chips" id="excl"></div>
+        <div class="addrow" data-admin><input type="text" id="exIn" placeholder="예: 급식, 청소 (Enter)"><button class="btn" type="button" id="exAdd">추가</button></div>
+      </div>
+      <div class="card">
+        <h2>발주처</h2>
+        <p class="note">공고기관·수요기관 이름에 들어 있으면 20점을 더합니다.</p>
+        <div class="chips" id="agencies"></div>
+        <div class="addrow" data-admin><input type="text" id="agIn" placeholder="기관명 (Enter)"><button class="btn" type="button" id="agAdd">추가</button></div>
+      </div>
+      <div class="savebar" data-admin>
+        <div class="msg" id="cmsg"></div>
+        <button class="btn" type="button" id="cReset">되돌리기</button>
+        <button class="btn primary" type="button" id="cSave">저장</button>
+      </div>
+    </div>
+
+    <div data-panel="sched" class="list" hidden>
       <p class="note">매 시간 확인해서 정한 요일·시각(한국시간)이 되면 <b>전날 공고</b> 엑셀을 활성 수신자 모두에게 보냅니다. 실제 발송은 정한 시각부터 1시간 안에 이뤄집니다.</p>
       <div class="list" id="schedList"></div>
       <form class="card add" id="schedAdd" data-admin>
@@ -232,7 +271,75 @@ function setTab(t) {
   $$("[data-panel]").forEach(p => p.hidden = p.dataset.panel !== t);
   try { localStorage.setItem("naraAdminTab", t); } catch (e) {}
 }
-async function loadAll() { await Promise.all([loadSched(), loadRcpt(), loadUsers(), loadLog()]); }
+async function loadAll() { await Promise.all([loadCrit(), loadSched(), loadRcpt(), loadUsers(), loadLog()]); }
+
+/* ---------- 추천 기준 ---------- */
+let CSAVED = null, CDRAFT = null, CVER = null;
+const cclone = o => JSON.parse(JSON.stringify(o));
+async function loadCrit() {
+  const row = await run(sb.from("settings").select("value,updated_at,updated_by").eq("key", "criteria").maybeSingle());
+  CSAVED = row?.value || { keyword_groups: [], exclude_keywords: [], agencies: [] };
+  CSAVED.keyword_groups ||= []; CSAVED.exclude_keywords ||= []; CSAVED.agencies ||= [];
+  CVER = row; CDRAFT = cclone(CSAVED); renderCrit();
+}
+function chipsHtml(arr, path, cls = "") {
+  return arr.map((k, i) => `<span class="kchip ${cls}">${esc(k)}${isAdmin ? `<button type="button" aria-label="${esc(k)} 삭제" data-cdel="${path}" data-i="${i}">×</button>` : ""}</span>`).join("")
+    || `<span class="meta">비어 있음</span>`;
+}
+function renderCrit() {
+  const d = CDRAFT;
+  $("#groups").innerHTML = d.keyword_groups.map((g, gi) => `
+    <div class="card">
+      <div class="ghead"><input type="text" value="${esc(g.name)}" data-gname="${gi}" aria-label="그룹 이름" ${isAdmin ? "" : "disabled"}>
+        <span class="pill">${g.keywords.length}개</span>
+        ${isAdmin ? `<button class="btn danger" type="button" data-gdel="${gi}">그룹 삭제</button>` : ""}</div>
+      <div class="chips">${chipsHtml(g.keywords, "g" + gi)}</div>
+      ${isAdmin ? `<div class="addrow"><input type="text" id="gin${gi}" data-gin="${gi}" placeholder="키워드 입력 후 Enter (쉼표로 여러 개)"><button class="btn" type="button" data-gadd="${gi}">추가</button></div>` : ""}
+    </div>`).join("") || `<div class="empty">키워드 그룹이 없습니다.</div>`;
+  $("#excl").innerHTML = chipsHtml(d.exclude_keywords, "exclude_keywords", "ex");
+  $("#agencies").innerHTML = chipsHtml(d.agencies, "agencies", "ag");
+  const dirty = JSON.stringify(CDRAFT) !== JSON.stringify(CSAVED);
+  $("#cSave").disabled = !dirty; $("#cReset").disabled = !dirty;
+  const m = $("#cmsg"); m.className = "msg";
+  m.textContent = dirty ? "저장하지 않은 변경이 있습니다."
+    : CVER?.updated_at ? `마지막 저장 ${fmt(CVER.updated_at)}${CVER.updated_by ? " · " + CVER.updated_by : ""}` : "";
+}
+const carr = path => path.startsWith("g") ? CDRAFT.keyword_groups[+path.slice(1)].keywords : CDRAFT[path];
+function caddTo(path, input) {
+  const arr = carr(path), vals = input.value.split(/[,\n]+/).map(x => x.trim()).filter(x => x && !arr.includes(x));
+  if (!vals.length) return;
+  arr.push(...vals); input.value = ""; renderCrit();
+  (path.startsWith("g") ? $("#gin" + path.slice(1)) : input)?.focus();
+}
+function bindCrit() {
+  const p = document.querySelector('[data-panel="crit"]');
+  p.addEventListener("click", e => {
+    const t = e.target;
+    if (t.dataset.cdel) { carr(t.dataset.cdel).splice(+t.dataset.i, 1); renderCrit(); }
+    else if (t.dataset.gadd) caddTo("g" + t.dataset.gadd, $("#gin" + t.dataset.gadd));
+    else if (t.dataset.gdel && confirm(`'${CDRAFT.keyword_groups[+t.dataset.gdel].name}' 그룹을 지울까요?`)) { CDRAFT.keyword_groups.splice(+t.dataset.gdel, 1); renderCrit(); }
+  });
+  p.addEventListener("keydown", e => {
+    if (e.key !== "Enter" || e.isComposing) return;
+    const t = e.target;
+    if (t.dataset.gin) { e.preventDefault(); caddTo("g" + t.dataset.gin, t); }
+    else if (t.id === "exIn") { e.preventDefault(); caddTo("exclude_keywords", t); }
+    else if (t.id === "agIn") { e.preventDefault(); caddTo("agencies", t); }
+  });
+  p.addEventListener("change", e => {
+    if (e.target.dataset.gname) { CDRAFT.keyword_groups[+e.target.dataset.gname].name = e.target.value.trim() || "이름 없음"; renderCrit(); }
+  }, true);
+  $("#exAdd").onclick = () => caddTo("exclude_keywords", $("#exIn"));
+  $("#agAdd").onclick = () => caddTo("agencies", $("#agIn"));
+  $("#addGroup").onclick = () => { CDRAFT.keyword_groups.push({ name: "새 그룹", keywords: [] }); renderCrit(); $("#gin" + (CDRAFT.keyword_groups.length - 1))?.focus(); };
+  $("#cReset").onclick = () => { CDRAFT = cclone(CSAVED); renderCrit(); };
+  $("#cSave").onclick = async () => {
+    $("#cSave").disabled = true;
+    const body = { key: "criteria", value: CDRAFT, updated_at: new Date().toISOString(), updated_by: prof?.name || me.email };
+    await run(sb.from("settings").upsert(body), "추천 기준을 저장했습니다. 다음 자동 실행부터 반영됩니다.");
+    CSAVED = cclone(CDRAFT); CVER = body; renderCrit();
+  };
+}
 
 async function loadSched() {
   const rows = await run(sb.from("schedules").select("*").order("send_time"));
@@ -339,8 +446,9 @@ async function addRcpt(e) {
   document.addEventListener("change", onChange);
   document.addEventListener("click", onClick);
   $("#schedAdd").onsubmit = addSched;
+  bindCrit();
   $("#rcptAdd").onsubmit = addRcpt;
-  let t = "sched"; try { t = localStorage.getItem("naraAdminTab") || t; } catch (e) {}
+  let t = "crit"; try { t = localStorage.getItem("naraAdminTab") || t; } catch (e) {}
   setTab(t);
   sb.auth.onAuthStateChange((ev, session) => {
     if (ev === "PASSWORD_RECOVERY") return show("pwBox");
