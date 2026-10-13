@@ -141,6 +141,11 @@ footer { color: var(--muted); font-size: 12.5px; }
 .period .hint { color: var(--muted); font-size: 12.5px; margin-left: auto; }
 .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--fg); color: var(--bg);
   padding: 10px 16px; border-radius: 8px; font-size: 14px; box-shadow: 0 6px 20px rgb(0 0 0 / .2); z-index: 10; max-width: calc(100% - 32px); }
+.filters select, .budget input { font: 14px var(--sans); color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 8px; max-width: 100%; }
+.budget { display: inline-flex; gap: 6px; align-items: center; font-size: 14px; color: var(--muted); }
+.budget input { width: 110px; font-family: var(--mono); }
+.filters select.on, .budget input.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+td.m { font-size: 12.5px; color: var(--muted); white-space: nowrap; }
 td.t { white-space: nowrap; font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
 </style>
 </head>
@@ -173,6 +178,16 @@ td.t { white-space: nowrap; font-family: var(--mono); font-size: 12.5px; color: 
     <span class="hint" id="avail"></span>
   </section>
 
+  <section class="period filters" aria-label="필터">
+    <span class="lbl">필터</span>
+    <select id="fRec" aria-label="추천 기준"><option value="">추천 기준: 전체</option><option value="rec">추천 공고만</option></select>
+    <select id="fType" aria-label="업무구분"><option value="">업무구분: 전체</option></select>
+    <select id="fCntr" aria-label="계약방법"><option value="">계약방법: 전체</option></select>
+    <select id="fBid" aria-label="입찰방식"><option value="">입찰방식: 전체</option></select>
+    <label class="budget">예산 <input type="number" id="fBudget" min="0" step="1000" inputmode="numeric" placeholder="0"> 만원 이상</label>
+    <button class="btn" type="button" id="fReset">필터 초기화</button>
+  </section>
+
   <section class="stats" id="stats" aria-label="요약"></section>
 
   <nav class="tabs" role="tablist">
@@ -184,19 +199,17 @@ td.t { white-space: nowrap; font-family: var(--mono); font-size: 12.5px; color: 
     <div class="typesum" id="typesum"></div>
     <div class="toolbar">
       <input type="search" id="dq" placeholder="공고명, 기관, 업종, 공고번호 검색">
-      <select id="dt" aria-label="업무구분"><option value="">전체 업무</option></select>
       <select id="dsort" aria-label="정렬">
         <option value="new">최신 공고순</option><option value="score">추천 점수순</option>
         <option value="close">마감 임박순</option><option value="budget">예산 큰 순</option>
       </select>
-      <label><input type="checkbox" id="donly"> 추천만</label>
       <span class="count" id="dcount"></span>
     </div>
     <div class="tablebox">
       <table>
         <thead><tr>
           <th>추천</th><th>공고일시</th><th>공고명</th><th>구분</th><th>공고기관</th>
-          <th style="text-align:right">배정예산</th><th>입찰마감</th><th></th>
+          <th style="text-align:right">배정예산</th><th>계약·입찰방식</th><th>입찰마감</th><th></th>
         </tr></thead>
         <tbody id="tbody"></tbody>
       </table>
@@ -207,8 +220,6 @@ td.t { white-space: nowrap; font-family: var(--mono); font-size: 12.5px; color: 
   <section id="p-rec" role="tabpanel" aria-labelledby="tab-rec" hidden style="display:grid;gap:12px">
     <div class="toolbar">
       <input type="search" id="rq" placeholder="공고명, 기관 검색">
-      <select id="rg" aria-label="키워드 그룹"><option value="">전체 그룹</option></select>
-      <select id="rt" aria-label="업무구분"><option value="">전체 업무</option></select>
       <label><input type="checkbox" id="ropen" checked> 마감 전만</label>
       <label><input type="checkbox" id="rsoon"> 7일 안에 마감</label>
       <span class="count" id="rcount"></span>
@@ -327,7 +338,7 @@ function setQuick(q) {
 }
 async function loadPeriod() {
   const ds = periodDates();
-  $("#tbody").innerHTML = `<tr><td colspan="8" class="empty">불러오는 중…</td></tr>`;
+  $("#tbody").innerHTML = `<tr><td colspan="9" class="empty">불러오는 중…</td></tr>`;
   await Promise.all(ds.map(fetchDay));
   ROWS = [];
   const seen = new Map();
@@ -342,12 +353,48 @@ async function loadPeriod() {
     }
   }
   RECS = [...seen.values()].sort((a, b) => b.score - a.score || (a.bidClseDate || "9").localeCompare(b.bidClseDate || "9"));
-  fillSelect($("#dt"), [...new Set(ROWS.map(b => b.bsnsDivNm || "기타"))].sort());
-  fillSelect($("#rt"), [...new Set(RECS.map(b => b.bsnsDivNm || "기타"))].sort());
-  fillSelect($("#rg"), [...(CRIT.keyword_groups || []).map(g => g.name), ...((CRIT.agencies || []).length ? ["발주처"] : [])]);
+  fillFilters();
   const f = $("#from").value, t = $("#to").value;
   $("#avail").textContent = ds.length ? `${f === t ? f : f + " ~ " + t} · 공고가 있는 날 ${ds.length}일` : "선택한 기간에 수집된 공고가 없습니다";
   shown = PAGE; renderStats(); renderTable(); renderRecs();
+}
+
+/* ---------- 공통 필터 ---------- */
+const FREC_FIXED = 2;   // fRec 의 고정 항목 수 (전체, 추천만)
+function fill(sel, values, keepN = 1) {
+  const keep = sel.dataset.want ?? sel.value; sel.length = keepN;
+  values.forEach(v => sel.insertAdjacentHTML("beforeend", `<option value="${esc(v)}">${esc(v)}</option>`));
+  sel.value = [...sel.options].some(o => o.value === keep) ? keep : "";
+}
+const byCount = key => { const c = {}; ROWS.forEach(b => { const v = b[key] || "기타"; c[v] = (c[v] || 0) + 1; }); return Object.keys(c).sort((a, b) => c[b] - c[a]); };
+function fillFilters() {
+  const groups = [...(CRIT.keyword_groups || []).map(g => g.name), ...((CRIT.agencies || []).length ? ["발주처"] : [])];
+  const r = $("#fRec"), keep = r.dataset.want ?? r.value; r.length = FREC_FIXED;
+  groups.forEach(g => r.insertAdjacentHTML("beforeend", `<option value="g:${esc(g)}">추천 그룹: ${esc(g)}</option>`));
+  r.value = [...r.options].some(o => o.value === keep) ? keep : "";
+  fill($("#fType"), byCount("bsnsDivNm")); fill($("#fCntr"), byCount("cntrctCnclsMthdNm")); fill($("#fBid"), byCount("bidwinrDcsnMthdNm"));
+  markFilters();
+}
+function markFilters() {
+  ["#fRec", "#fType", "#fCntr", "#fBid"].forEach(s => $(s).classList.toggle("on", !!$(s).value));
+  $("#fBudget").classList.toggle("on", +$("#fBudget").value > 0);
+}
+function passes(b) {
+  const rec = $("#fRec").value, min = (+$("#fBudget").value || 0) * 1e4;
+  if (rec === "rec" && b.score == null) return false;
+  if (rec.startsWith("g:") && !(b.groups || []).includes(rec.slice(2))) return false;
+  if ($("#fType").value && (b.bsnsDivNm || "기타") !== $("#fType").value) return false;
+  if ($("#fCntr").value && (b.cntrctCnclsMthdNm || "기타") !== $("#fCntr").value) return false;
+  if ($("#fBid").value && (b.bidwinrDcsnMthdNm || "기타") !== $("#fBid").value) return false;
+  if (min && (toInt(b.asignBdgtAmt) || toInt(b.presmptPrce)) < min) return false;
+  return true;
+}
+
+const FKEYS = ["fRec", "fType", "fCntr", "fBid", "fBudget"];
+function saveFilters() { try { localStorage.setItem("naraFilters", JSON.stringify(Object.fromEntries(FKEYS.map(k => [k, $("#" + k).value])))); } catch (e) {} }
+function loadFilters() {
+  let f = {}; try { f = JSON.parse(localStorage.getItem("naraFilters") || "{}"); } catch (e) {}
+  FKEYS.forEach(k => { if (f[k] != null) { const el = $("#" + k); el.dataset.want = f[k]; el.value = f[k]; } });
 }
 
 /* ---------- 요약 ---------- */
@@ -374,8 +421,8 @@ const SORTS = {
   budget: (a, b) => (+b.asignBdgtAmt || 0) - (+a.asignBdgtAmt || 0),
 };
 function renderTable() {
-  const q = $("#dq").value.trim().toLowerCase(), t = $("#dt").value, only = $("#donly").checked;
-  LIST = ROWS.filter(b => match(b, q) && (!t || (b.bsnsDivNm || "기타") === t) && (!only || b.score != null));
+  const q = $("#dq").value.trim().toLowerCase();
+  LIST = ROWS.filter(b => match(b, q) && passes(b));
   LIST.sort(SORTS[$("#dsort").value]);
   $("#dcount").textContent = `${LIST.length.toLocaleString()} / ${ROWS.length.toLocaleString()}건`;
   $("#tbody").innerHTML = LIST.length ? LIST.slice(0, shown).map((b, i) => `
@@ -386,9 +433,10 @@ function renderTable() {
       <td style="white-space:nowrap">${esc(b.bsnsDivNm)}</td>
       <td>${esc(b.ntceInsttNm)}</td>
       <td class="n">${won(b.asignBdgtAmt)}</td>
+      <td class="m">${esc(b.cntrctCnclsMthdNm)}<br>${esc(b.bidwinrDcsnMthdNm)}</td>
       <td class="d">${esc((b.bidClseDate || "").slice(5))} ${esc(b.bidClseTm)}</td>
       <td><a class="out" href="${esc(b.bidNtceUrl)}" target="_blank" rel="noopener">공고 ↗</a></td>
-    </tr>`).join("") : `<tr><td colspan="8" class="empty">조건에 맞는 공고가 없습니다.</td></tr>`;
+    </tr>`).join("") : `<tr><td colspan="9" class="empty">조건에 맞는 공고가 없습니다.</td></tr>`;
   const rest = LIST.length - shown;
   $("#more").hidden = rest <= 0;
   $("#more").innerHTML = rest > 0 ? `${shown.toLocaleString()}건까지 표시했습니다. <button class="btn" type="button" id="moreBtn">${Math.min(rest, PAGE)}건 더 보기</button> 전체는 엑셀로 받을 수 있습니다.` : "";
@@ -404,16 +452,14 @@ function onRowClick(e) {
     ["개찰", `${b.opengDate} ${b.opengTm}`], ["지역제한", b.rgnLmtYn === "Y" ? (b.prtcptPsblRgnNm || "있음") : "없음"],
     ["업종제한", b.indstrytyLmtYn === "Y" ? (b.bidprcPsblIndstrytyNm || "있음") : "없음"],
     ["판정", (b.why || []).map(w => (w.g ? w.g + ": " : "") + w.t).join(" / ") || "기준에 맞는 키워드 없음"]];
-  tr.insertAdjacentHTML("afterend", `<tr class="detail"><td colspan="8"><dl class="dl">${f.map(([k, v]) =>
+  tr.insertAdjacentHTML("afterend", `<tr class="detail"><td colspan="9"><dl class="dl">${f.map(([k, v]) =>
     `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl></td></tr>`);
 }
 
 /* ---------- 추천 공고 ---------- */
 function recList() {
-  const q = $("#rq").value.trim().toLowerCase(), g = $("#rg").value, t = $("#rt").value;
-  const openOnly = $("#ropen").checked, soon = $("#rsoon").checked;
-  return RECS.filter(b => match(b, q) && (!g || b.groups.includes(g)) && (!t || b.bsnsDivNm === t)
-    && (!openOnly || b.open) && (!soon || (dleft(b.bidClseDate) ?? 99) <= 7));
+  const q = $("#rq").value.trim().toLowerCase(), openOnly = $("#ropen").checked, soon = $("#rsoon").checked;
+  return RECS.filter(b => match(b, q) && passes(b) && (!openOnly || b.open) && (!soon || (dleft(b.bidClseDate) ?? 99) <= 7));
 }
 function renderRecs() {
   const list = recList();
@@ -523,15 +569,42 @@ async function loadMeta() {
   const kw = (CRIT.keyword_groups || []).map(g => g.name).join(", ");
   $("#foot").textContent = `데이터: 조달청 나라장터 공공데이터개방표준서비스 (입찰공고정보) · 추천 기준: ${kw}${(CRIT.agencies || []).length ? ", 발주처 " + CRIT.agencies.length + "곳" : ""}`;
 }
+// 갱신: 저장된 수집 결과를 다시 읽고, 실시간 조회 함수가 있으면 지금 시각까지 나라장터에서 바로 받아 합친다.
+async function liveFetch() {
+  let cfg; try { cfg = await (await fetch(DATA_BASE + "admin-config.json" + bust, { cache: "no-cache" })).json(); } catch (e) { return null; }
+  if (!cfg?.supabaseUrl || !cfg?.supabaseAnonKey) return null;
+  const url = cfg.supabaseUrl.replace(/\/$/, ""), anon = cfg.supabaseAnonKey;
+  const kst = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+  const day = await fetchDay(kst);
+  const since = day.reduce((m, b) => { const t = `${b.bidNtceDate} ${b.bidNtceBgn}`; return t > m ? t : m; }, "");
+  const r = await fetch(`${url}/functions/v1/nara-live?since=${encodeURIComponent(since)}`,
+    { headers: { Authorization: "Bearer " + anon, apikey: anon }, signal: AbortSignal.timeout(90000) });
+  const res = await r.json();
+  if (!r.ok || res.error) throw new Error(res.error || r.status);
+  const have = new Set(day.map(b => b.bidNtceNo + "-" + b.bidNtceOrd));
+  const fresh = res.items.filter(b => b.bidNtceDate === res.date && !have.has(b.bidNtceNo + "-" + b.bidNtceOrd));
+  DAYDATA[res.date] = [...day, ...fresh];
+  let d = META.days.find(x => x.date === res.date);
+  if (!d) { d = { date: res.date, total: 0 }; META.days.unshift(d); META.days.sort((a, b) => b.date.localeCompare(a.date)); }
+  d.total = DAYDATA[res.date].length;
+  ["#from", "#to"].forEach(s => $(s).max = dates()[0]);
+  $("#gen").textContent = `나라장터 실시간 조회 ${res.fetched_at} · 오늘 공고 ${d.total.toLocaleString()}건`;
+  return { added: fresh.length, at: res.fetched_at };
+}
 async function refresh() {
   const btn = $("#refresh"), before = META?.generated;
-  btn.disabled = true; btn.classList.add("spin");
+  btn.disabled = true; btn.classList.add("spin"); toast("나라장터에서 지금까지의 공고를 받아오는 중입니다…");
   try {
     bust = "?t=" + Date.now(); DAYDATA = {};
     await loadMeta();
+    let live = null, liveErr = false;
+    try { live = await liveFetch(); } catch (e) { liveErr = true; }
     if (quick) setQuick(quick);
     await loadPeriod();
-    toast(META.generated !== before ? `새 수집 결과(${META.generated.replace("T", " ")})를 불러왔습니다.` : "이미 최신입니다. 다음 자동 수집 뒤에 다시 눌러 보세요.");
+    toast(live ? `${live.at} 기준으로 갱신했습니다. 새 공고 ${live.added.toLocaleString()}건.`
+      : liveErr ? "나라장터 실시간 조회에 실패해 마지막 자동 수집 결과를 보여 드립니다."
+      : META.generated !== before ? `새 수집 결과(${META.generated.replace("T", " ")})를 불러왔습니다.`
+      : "이미 최신입니다. 실시간 조회는 관리자 설정 뒤에 쓸 수 있습니다.");
   } catch (e) { toast("불러오지 못했습니다. 잠시 뒤 다시 눌러 주세요."); }
   finally { btn.disabled = false; btn.classList.remove("spin"); }
 }
@@ -548,8 +621,12 @@ async function init() {
     return;
   }
   setQuick("1");
-  ["#dq", "#dt", "#dsort", "#donly"].forEach(s => $(s).addEventListener("input", () => { shown = PAGE; renderTable(); }));
-  ["#rq", "#rg", "#rt", "#ropen", "#rsoon"].forEach(s => $(s).addEventListener("input", renderRecs));
+  ["#dq", "#dsort"].forEach(s => $(s).addEventListener("input", () => { shown = PAGE; renderTable(); }));
+  ["#rq", "#ropen", "#rsoon"].forEach(s => $(s).addEventListener("input", renderRecs));
+  const onFilter = () => { FKEYS.forEach(k => delete $("#" + k).dataset.want);  markFilters(); shown = PAGE; renderTable(); renderRecs(); saveFilters(); };
+  ["#fRec", "#fType", "#fCntr", "#fBid", "#fBudget"].forEach(s => $(s).addEventListener("input", onFilter));
+  $("#fReset").onclick = () => { ["#fRec", "#fType", "#fCntr", "#fBid", "#fBudget"].forEach(s => $(s).value = ""); onFilter(); };
+  loadFilters();
   $("#quick").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { setQuick(b.dataset.q); loadPeriod(); } });
   ["#from", "#to"].forEach(s => $(s).addEventListener("change", () => {
     if ($("#from").value && $("#to").value && $("#from").value > $("#to").value) [$("#from").value, $("#to").value] = [$("#to").value, $("#from").value];

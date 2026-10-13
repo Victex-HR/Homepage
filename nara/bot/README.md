@@ -31,6 +31,19 @@ GitHub Actions(저장소 루트 `.github/workflows/nara.yml`)가 매시간 `nara
 3. Actions 탭에서 `NARA 입찰공고 수집·메일 발송` 을 한 번 수동 실행(Run workflow)합니다.
 4. 관리 화면에서 **가장 먼저 가입한 사람이 관리자**가 됩니다. 이후 가입자는 관리자가 '가입자' 탭에서 승인합니다.
 
+## 갱신 버튼으로 실시간 조회 (선택)
+공개 페이지의 '갱신'을 누르면 Supabase Edge Function `nara-live` 가 마지막 수집 이후부터 지금까지의 오늘 공고를
+나라장터에서 바로 받아 화면에 합칩니다. 인증키는 함수 비밀값에만 있고 브라우저로 나가지 않습니다.
+설정하지 않으면 '갱신'은 마지막 자동 수집 결과(2시간마다)를 다시 불러옵니다.
+
+1. Supabase > Edge Functions > **Deploy a new function** > Via Editor 에서 이름을 `nara-live` 로 하고,
+   `nara/bot/supabase/functions/nara-live/index.ts` 내용을 붙여넣어 Deploy 합니다.
+   (CLI 를 쓰면 `nara/bot` 에서 `supabase functions deploy nara-live`)
+2. Edge Functions > **Secrets** 에 `NARA_API_KEY` 를 추가합니다 (GitHub Secrets 에 넣은 것과 같은 키).
+3. 위 2단계의 `SUPABASE_URL`, `SUPABASE_ANON_KEY` 가 들어가 있으면 다음 자동 수집 때부터 페이지가 함수를 찾습니다.
+
+같은 시간대는 3분 동안 다시 조회하지 않아 여러 사람이 연달아 눌러도 API 호출 한도를 크게 쓰지 않습니다.
+
 ## Supabase 없이 메일만 먼저 받기
 관리 화면을 설정하기 전에도 저장소 Variables 에 `MAIL_TO`(쉼표로 여러 주소)와 `MAIL_TIME`(예: `00:00`, 비우면 자정)을
 넣으면 매일 그 시각에 보냅니다. Supabase 를 설정하면 관리 화면의 일정과 수신자가 대신 쓰입니다.
