@@ -587,7 +587,7 @@ let tt; function toast(t) { const el = $("#toast"); el.textContent = t; el.hidde
 async function loadMeta() {
   META = await (await fetch(DATA_BASE + "index.json" + bust, { cache: "no-cache" })).json();
   CRIT = META.criteria || {};
-  $("#gen").textContent = `마지막 수집 ${META.generated.replace("T", " ")} · 오늘 공고는 2시간마다 자동 수집`;
+  $("#gen").textContent = `마지막 수집 ${META.generated.replace("T", " ")} · 새 공고는 15분마다 자동 수집`;
   const ds = dates();
   ["#from", "#to"].forEach(s => { $(s).min = ds[ds.length - 1] || ""; $(s).max = ds[0] || ""; });
   const kw = (CRIT.keyword_groups || []).map(g => g.name).join(", ");

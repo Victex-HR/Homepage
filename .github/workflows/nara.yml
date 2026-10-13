@@ -6,7 +6,7 @@ name: NARA 입찰공고 수집·메일 발송
 
 on:
   schedule:
-    - cron: "7 * * * *"      # 매시 7분 (UTC). 발송 시각 판단은 nara.py 가 한국시간으로 함
+    - cron: "*/15 * * * *"   # 15분마다 (UTC). 발송 시각 판단은 nara.py 가 한국시간으로 함
   workflow_dispatch:
     inputs:
       force_update:

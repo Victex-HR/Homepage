@@ -162,6 +162,33 @@ def update_site(days_back=3, include_today=True, only_today=False):
     rebuild_index(cfg, state)
 
 
+def update_today_new():
+    """오늘 공고 중 이미 가진 마지막 공고 시각 이후만 받아 덧붙인다 (몇 초~수십 초)."""
+    key = os.environ.get("NARA_API_KEY")
+    if not key:
+        raise SystemExit("NARA_API_KEY 가 없습니다.")
+    cfg, now = load_cfg(), now_kst()
+    d = now.date()
+    path = os.path.join(DAYS, d.strftime("%Y%m%d") + ".json")
+    try:
+        rows = json.load(open(path, encoding="utf-8"))
+    except (OSError, ValueError):
+        rows = []
+    last = max((r.get("bidNtceBgn") or "00:00" for r in rows), default="00:00")
+    have = {(r["bidNtceNo"], r["bidNtceOrd"]) for r in rows}
+    got = []
+    for h in range(int(last[:2]), now.hour + 1):
+        items, _ = nb.fetch_window(key, f"{d:%Y%m%d}{h:02d}00", f"{d:%Y%m%d}{h:02d}59")
+        got.extend(items)
+    new = [r for r in slim(got, cfg, d.isoformat()) if (r["bidNtceNo"], r["bidNtceOrd"]) not in have]
+    rows = sorted(rows + new, key=lambda r: r.get("bidNtceBgn") or "")
+    os.makedirs(DAYS, exist_ok=True)
+    json.dump(rows, open(path, "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))
+    print(f"[{d}] {last} 이후 새 공고 {len(new)}건", flush=True)
+    rebuild_index(cfg, {"new_at": now.strftime("%Y-%m-%dT%H:%M")})
+    return bool(new)
+
+
 # ---------------------------------------------------------------- 엑셀
 COLS = [("추천점수", "score", 9), ("공고명", "bidNtceNm", 60), ("업무구분", "bsnsDivNm", 9),
         ("공고기관", "ntceInsttNm", 26), ("수요기관", "dmndInsttNm", 26),
@@ -341,7 +368,10 @@ def tick():
         last = meta.get("today_at") or ""
         if not last.startswith(now.date().isoformat()) or \
                 now - dt.datetime.fromisoformat(last).replace(tzinfo=KST) >= dt.timedelta(hours=TODAY_EVERY_H):
-            update_site(only_today=True)    # 2시간마다 오늘 공고
+            update_site(only_today=True)    # 2시간마다 오늘 공고 전체 (정정·누락 보정)
+            changed = True
+        else:
+            update_today_new()              # 그 사이에는 매번 새 공고만 덧붙임
             changed = True
     # 관리 화면에서 기준을 바꾸면 수집 없이 점수만 다시 매겨 공개 화면에 반영
     if not changed and meta and load_cfg() != meta.get("criteria"):
