@@ -241,7 +241,7 @@ const TYPES = ["물품", "용역", "공사", "외자"];
 const RECENT_DAYS = 10;
 // 공고 데이터는 매일 갱신되는 nara-data 브랜치에서 읽음 (홈페이지 이력에 데이터가 쌓이지 않도록)
 const DATA_BASE = location.hostname.endsWith("github.io")
-  ? "https://raw.githubusercontent.com/Victex-HR/homepage/nara-data/" : "data/";
+  ? "https://raw.githubusercontent.com/Victex-HR/Homepage/nara-data/" : "data/";
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const clone = o => JSON.parse(JSON.stringify(o));

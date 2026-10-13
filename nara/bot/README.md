@@ -2,8 +2,8 @@
 
 홈페이지 저장소의 `nara/` 폴더입니다. 화면은 `nara/index.html`, `nara/admin/`, 수집·발송 코드는 `nara/bot/` 에 있습니다.
 
-- **공개 화면**: `https://victex-hr.github.io/homepage/nara/`. 로그인 없이 열립니다 (추천 공고 / 일일 정리).
-- **관리 화면**: `https://victex-hr.github.io/homepage/nara/admin/`. 별도로 로그인하며, 가입자 승인과 발송 일정·메일 수신자를 관리합니다.
+- **공개 화면**: `https://victex-hr.github.io/Homepage/nara/`. 로그인 없이 열립니다 (추천 공고 / 일일 정리).
+- **관리 화면**: `https://victex-hr.github.io/Homepage/nara/admin/`. 별도로 로그인하며, 가입자 승인과 발송 일정·메일 수신자를 관리합니다.
 - **엑셀 메일**: 정한 요일·시각(한국시간)에 **전날 공고** 엑셀을 수신자에게 보냅니다.
   엑셀은 추천 공고, 진행 중 추천 전체, 전체 공고 세 개 시트로 되어 있습니다.
 
@@ -20,7 +20,7 @@ GitHub Actions(저장소 루트 `.github/workflows/nara.yml`)가 매시간 `nara
 
 ## 처음 설정 순서
 1. **Supabase**: 프로젝트를 만든 뒤 SQL Editor 에 `nara/bot/schema.sql` 을 붙여넣고 Run 합니다.
-   Authentication > URL Configuration 의 Site URL 에 `https://victex-hr.github.io/homepage/nara/admin/` 을 넣습니다.
+   Authentication > URL Configuration 의 Site URL 에 `https://victex-hr.github.io/Homepage/nara/admin/` 을 넣습니다.
 2. **GitHub 저장소 Settings > Secrets and variables > Actions**
    - Variables: `SUPABASE_URL`, `SUPABASE_ANON_KEY` (Supabase > Project Settings > API 의 URL 과 anon public 키)
    - Secrets: `SUPABASE_SERVICE_KEY` (같은 화면의 service_role 키), `NARA_API_KEY`,

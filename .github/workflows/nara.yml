@@ -55,7 +55,7 @@ jobs:
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           MAIL_FROM: ${{ secrets.MAIL_FROM }}
-          SITE_URL: https://victex-hr.github.io/homepage/nara/
+          SITE_URL: https://victex-hr.github.io/Homepage/nara/
         run: python nara.py tick
 
       - name: 공고 데이터 올리기 (nara-data 브랜치)

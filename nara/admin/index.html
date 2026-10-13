@@ -164,7 +164,7 @@ const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAl
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const DAYN = ["월", "화", "수", "목", "금", "토", "일"];
 const DATA_BASE = location.hostname.endsWith("github.io")
-  ? "https://raw.githubusercontent.com/Victex-HR/homepage/nara-data/" : "../data/";
+  ? "https://raw.githubusercontent.com/Victex-HR/Homepage/nara-data/" : "../data/";
 let CFG = {};
 let sb, me = null, prof = null, isAdmin = false, mode = "in";
 
