@@ -1,11 +1,14 @@
 <!doctype html>
 <html lang="ko">
-<title>나라장터 입찰 추천</title>
+<head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>나라장터 입찰 추천</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
 <style>
+/* Layout: 제목·갱신 → 요약 띠 → 기간 선택 → 탭(공고 목록 / 추천 공고) → 목록. */
+
 /* Layout: 상단 요약 띠 → 탭(추천 공고 / 일일 정리) → 목록. 조달 문서의 차분한 잉크색, 추천은 청록, 마감 임박은 인주색. */
 :root {
   --bg: #f4f6f8; --surface: #ffffff; --line: #dde3e9; --fg: #16202a; --muted: #5b6875;
@@ -117,136 +120,116 @@ footer { color: var(--muted); font-size: 12.5px; }
   .rec .why { grid-column: 2; grid-row: 4; }
 }
 
-/* 추천 기준 탭 */
-.crit { display: grid; gap: 16px; }
-.cbox { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 10px; min-width: 0; }
-.cbox h3 { margin: 0; font-size: 15px; font-weight: 600; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.cbox h3 input { font: 600 15px var(--sans); color: var(--fg); background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 2px 6px; min-width: 0; flex: 1 1 160px; }
-.cbox h3 input:hover, .cbox h3 input:focus { border-color: var(--line); }
-.cbox .hint { color: var(--muted); font-size: 12.5px; margin: 0; }
-.chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.kchip { display: inline-flex; align-items: center; gap: 2px; font-size: 13px; padding: 3px 4px 3px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
-.kchip.ag { background: var(--chip); color: var(--fg); }
-.kchip button { all: unset; cursor: pointer; width: 18px; height: 18px; display: grid; place-items: center; border-radius: 50%; font-size: 14px; line-height: 1; color: inherit; opacity: .7; }
-.kchip button:hover { opacity: 1; background: color-mix(in srgb, currentColor 15%, transparent); }
-.kchip button:focus-visible { outline: 2px solid var(--accent); }
-.addrow { display: flex; gap: 6px; flex-wrap: wrap; }
-.addrow input, .grid2 input { font: 14px var(--sans); color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; min-width: 0; flex: 1 1 200px; }
-.btn { appearance: none; font: 600 13.5px var(--sans); border-radius: 8px; padding: 7px 12px; cursor: pointer; border: 1px solid var(--line); background: var(--surface); color: var(--fg); }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
-.btn.ghost { border-color: transparent; color: var(--muted); }
-.btn.danger { color: var(--danger); border-color: transparent; background: transparent; }
-.btn:disabled { opacity: .5; cursor: default; }
-.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
-.grid2 label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
-.checks { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 14px; }
-.grid2 .checks label, .checks label { display: inline-flex; gap: 6px; align-items: center; font-size: 14px; color: var(--fg); }
-.savebar { position: sticky; bottom: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px;
-  display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); }
-.savebar .msg { flex: 1 1 220px; font-size: 13.5px; color: var(--muted); min-width: 0; }
-.savebar .msg b { color: var(--accent); font-family: var(--mono); font-weight: 500; }
-.savebar .msg.err { color: var(--danger); }
-</style>
 
+.head-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.btn { appearance: none; font: 600 14px var(--sans); border-radius: 8px; padding: 8px 14px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--surface); color: var(--fg); white-space: nowrap; display: inline-flex; gap: 6px; align-items: center; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.btn:disabled { opacity: .55; cursor: default; }
+.btn svg { width: 16px; height: 16px; }
+.spin svg { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.period { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px;
+  display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; }
+.period .lbl { font-weight: 600; font-size: 14px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { appearance: none; border: 0; background: var(--surface); color: var(--muted); font: 600 13.5px var(--sans); padding: 7px 12px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.range { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.range input { font: 14px var(--mono); color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
+.period .hint { color: var(--muted); font-size: 12.5px; margin-left: auto; }
+.toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--fg); color: var(--bg);
+  padding: 10px 16px; border-radius: 8px; font-size: 14px; box-shadow: 0 6px 20px rgb(0 0 0 / .2); z-index: 10; max-width: calc(100% - 32px); }
+td.t { white-space: nowrap; font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
+</style>
+</head>
+<body>
 <div class="wrap">
   <header>
-    <h1>나라장터 입찰 추천</h1>
-    <div class="sub" id="gen">불러오는 중…</div>
+    <div style="display:grid;gap:2px">
+      <h1>나라장터 입찰 추천</h1>
+      <div class="sub" id="gen">불러오는 중…</div>
+    </div>
+    <div class="head-actions">
+      <button class="btn" type="button" id="refresh" title="최신 수집 결과를 다시 불러옵니다">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>갱신</button>
+      <button class="btn primary" type="button" id="excel">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>엑셀 다운로드</button>
+    </div>
   </header>
-  <div class="banner" id="banner" hidden></div>
+
+  <section class="period" aria-label="기간">
+    <span class="lbl">공고일</span>
+    <div class="seg" id="quick">
+      <button type="button" data-q="1" aria-pressed="true">갱신일</button>
+      <button type="button" data-q="7" aria-pressed="false">최근 7일</button>
+      <button type="button" data-q="30" aria-pressed="false">최근 30일</button>
+      <button type="button" data-q="all" aria-pressed="false">전체</button>
+    </div>
+    <div class="range">
+      <input type="date" id="from" aria-label="시작일"> <span>~</span> <input type="date" id="to" aria-label="종료일">
+    </div>
+    <span class="hint" id="avail"></span>
+  </section>
+
   <section class="stats" id="stats" aria-label="요약"></section>
 
   <nav class="tabs" role="tablist">
-    <button class="tab" role="tab" id="tab-rec" aria-selected="true" aria-controls="p-rec">추천 공고</button>
-    <button class="tab" role="tab" id="tab-day" aria-selected="false" aria-controls="p-day">일일 정리</button>
-    <button class="tab" role="tab" id="tab-crit" aria-selected="false" aria-controls="p-crit">추천 기준</button>
+    <button class="tab" role="tab" id="tab-list" aria-selected="true" aria-controls="p-list">공고 목록</button>
+    <button class="tab" role="tab" id="tab-rec" aria-selected="false" aria-controls="p-rec">추천 공고</button>
   </nav>
 
-  <section id="p-rec" role="tabpanel" aria-labelledby="tab-rec" style="display:grid;gap:12px">
-    <div class="toolbar">
-      <input type="search" id="rq" placeholder="공고명, 기관 검색">
-      <select id="rg" aria-label="키워드 그룹"><option value="">전체 그룹</option></select>
-      <select id="rt" aria-label="업무구분"><option value="">전체 업무</option></select>
-      <label><input type="checkbox" id="rsoon"> 7일 안에 마감</label>
-      <span class="count" id="rcount"></span>
-    </div>
-    <div class="recs" id="recs"></div>
-  </section>
-
-  <section id="p-day" role="tabpanel" aria-labelledby="tab-day" hidden style="display:grid;gap:12px">
-    <div class="days" id="days"></div>
+  <section id="p-list" role="tabpanel" aria-labelledby="tab-list" style="display:grid;gap:12px">
     <div class="typesum" id="typesum"></div>
     <div class="toolbar">
-      <input type="search" id="dq" placeholder="공고명, 기관, 업종 검색">
+      <input type="search" id="dq" placeholder="공고명, 기관, 업종, 공고번호 검색">
       <select id="dt" aria-label="업무구분"><option value="">전체 업무</option></select>
+      <select id="dsort" aria-label="정렬">
+        <option value="new">최신 공고순</option><option value="score">추천 점수순</option>
+        <option value="close">마감 임박순</option><option value="budget">예산 큰 순</option>
+      </select>
       <label><input type="checkbox" id="donly"> 추천만</label>
       <span class="count" id="dcount"></span>
     </div>
     <div class="tablebox">
       <table>
         <thead><tr>
-          <th><button data-k="score">추천</button></th><th>공고명</th><th>구분</th><th>공고기관</th>
-          <th style="text-align:right"><button data-k="budget">배정예산</button></th>
-          <th><button data-k="close">입찰마감</button></th><th>계약방법</th><th></th>
+          <th>추천</th><th>공고일시</th><th>공고명</th><th>구분</th><th>공고기관</th>
+          <th style="text-align:right">배정예산</th><th>입찰마감</th><th></th>
         </tr></thead>
         <tbody id="tbody"></tbody>
       </table>
     </div>
+    <div class="empty" id="more" hidden></div>
   </section>
 
-  <section id="p-crit" role="tabpanel" aria-labelledby="tab-crit" hidden class="crit">
-    <p class="hint" style="margin:0">여기서 바꾼 기준은 이 화면의 추천에 바로 반영되고, 저장하면 매일 아침 수집에도 적용됩니다.
-      키워드는 공고명에서 찾습니다. 대소문자는 구분하지 않고, 여러 개는 쉼표나 줄바꿈으로 한 번에 넣을 수 있습니다.
-      앞에 <code>^</code>를 붙이면 단어 첫머리에서만 찾습니다 (<code>^고리</code>는 “고리2호기”는 찾고 “카테고리”는 건너뜀).</p>
-    <div id="groups" class="crit"></div>
-    <div><button class="btn" id="addGroup" type="button">+ 키워드 그룹 추가</button></div>
-
-    <div class="cbox">
-      <h3>발주처</h3>
-      <p class="hint">공고기관이나 수요기관 이름에 포함되면 추천합니다. 띄어쓰기와 “재단법인”, “(주)”는 무시합니다.</p>
-      <div class="chips" id="agencies"></div>
-      <div class="addrow"><input id="agIn" placeholder="기관명 입력 후 Enter"><button class="btn" type="button" id="agAdd">추가</button></div>
+  <section id="p-rec" role="tabpanel" aria-labelledby="tab-rec" hidden style="display:grid;gap:12px">
+    <div class="toolbar">
+      <input type="search" id="rq" placeholder="공고명, 기관 검색">
+      <select id="rg" aria-label="키워드 그룹"><option value="">전체 그룹</option></select>
+      <select id="rt" aria-label="업무구분"><option value="">전체 업무</option></select>
+      <label><input type="checkbox" id="ropen" checked> 마감 전만</label>
+      <label><input type="checkbox" id="rsoon"> 7일 안에 마감</label>
+      <span class="count" id="rcount"></span>
     </div>
-
-    <div class="cbox">
-      <h3>걸러내기</h3>
-      <div class="grid2">
-        <div style="display:grid;gap:6px"><span class="hint">업무구분 (선택 안 하면 전체)</span>
-          <div class="checks" id="types"></div></div>
-        <label>최소 배정예산 (만원, 0은 제한 없음)<input id="minB" type="number" min="0" step="100" inputmode="numeric"></label>
-        <label>최대 배정예산 (만원, 0은 제한 없음)<input id="maxB" type="number" min="0" step="100" inputmode="numeric"></label>
-        <label>마감까지 최소 남은 일수<input id="minD" type="number" min="0" max="30" inputmode="numeric"></label>
-      </div>
-      <div style="display:grid;gap:6px"><span class="hint">회사 소재지 (지역제한 공고 중 이 지역이 아닌 것은 뺍니다. 비우면 제한 없음)</span>
-        <div class="chips" id="regions"></div>
-        <div class="addrow"><input id="rgIn" placeholder="예: 대전, 경기"><button class="btn" type="button" id="rgAdd">추가</button></div></div>
-      <div style="display:grid;gap:6px"><span class="hint">제외 키워드 (공고명에 있으면 추천에서 뺍니다)</span>
-        <div class="chips" id="excl"></div>
-        <div class="addrow"><input id="exIn" placeholder="예: 급식, 청소"><button class="btn" type="button" id="exAdd">추가</button></div></div>
-    </div>
-
-    <div class="savebar">
-      <div class="msg" id="smsg"></div>
-      <button class="btn ghost" type="button" id="reset">되돌리기</button>
-      <button class="btn primary" type="button" id="save">저장</button>
-    </div>
+    <div class="recs" id="recs"></div>
   </section>
 
   <footer id="foot">데이터: 조달청 나라장터 공공데이터개방표준서비스 (입찰공고정보)</footer>
 </div>
+<div class="toast" id="toast" role="status" hidden></div>
 
 <script>
 const TYPE_COLOR = { "물품": "var(--accent)", "용역": "var(--warn)", "공사": "var(--danger)", "외자": "var(--muted)", "기타": "var(--muted)" };
-const TYPES = ["물품", "용역", "공사", "외자"];
-const RECENT_DAYS = 10;
-// 공고 데이터는 매일 갱신되는 nara-data 브랜치에서 읽음 (홈페이지 이력에 데이터가 쌓이지 않도록)
+// 공고 데이터는 nara-data 브랜치에서 읽음 (홈페이지 이력에 데이터가 쌓이지 않도록)
 const DATA_BASE = location.hostname.endsWith("github.io")
   ? "https://raw.githubusercontent.com/Victex-HR/Homepage/nara-data/" : "data/";
-const $ = s => document.querySelector(s);
+const PAGE = 300;   // 표에 한 번에 그리는 행 수
+const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const clone = o => JSON.parse(JSON.stringify(o));
 const today = new Date(); today.setHours(0, 0, 0, 0);
-let META, CRIT, SAVED, DRAFT, DB = null, CAN_SAVE = true, DAYDATA = {}, RECS = [], curDay = null, sortKey = "score";
+let META, CRIT, DAYDATA = {}, ROWS = [], LIST = [], RECS = [], shown = PAGE, quick = "1", bust = "";
 
 /* ---------- 점수 (nara_bids.py 의 score 와 같은 규칙) ---------- */
 const isAlpha = c => /[a-z]/.test(c), isAlnum = c => /[a-z0-9가-힣]/.test(c), isAscii = s => /^[\x00-\x7f]*$/.test(s);
@@ -301,6 +284,7 @@ function score(b, c, ref) {
   return { score: s, why, groups };
 }
 
+
 /* ---------- 공통 표시 ---------- */
 function won(v) {
   const n = +v || 0; if (!n) return "-";
@@ -319,43 +303,122 @@ function fillSelect(sel, values) {
   sel.value = values.includes(keep) ? keep : "";
 }
 
-/* ---------- 추천 계산 ---------- */
-function computeRecs(c) {
-  const seen = new Map();
-  for (const d of META.days.slice(0, RECENT_DAYS)) for (const b of DAYDATA[d.date] || []) {
-    const r = score(b, c, today); if (!r) continue;
-    const prev = seen.get(b.bidNtceNo);
-    if (!prev || b.bidNtceOrd > prev.bidNtceOrd) seen.set(b.bidNtceNo, { ...b, ...r });
+
+/* ---------- 데이터 ---------- */
+const dates = () => META.days.filter(d => d.total > 0).map(d => d.date);   // 공고가 있는 날, 최신순
+async function fetchDay(date) {
+  if (!DAYDATA[date]) {
+    try { DAYDATA[date] = await (await fetch(`${DATA_BASE}days/${date.replaceAll("-", "")}.json${bust}`, { cache: "no-cache" })).json(); }
+    catch (e) { DAYDATA[date] = []; }
   }
-  return [...seen.values()].sort((a, b) => b.score - a.score || (a.bidClseDate || "9").localeCompare(b.bidClseDate || "9"));
+  return DAYDATA[date];
 }
-
-function refreshAll() {
-  RECS = computeRecs(CRIT);
-  fillSelect($("#rg"), [...(CRIT.keyword_groups || []).map(g => g.name), ...((CRIT.agencies || []).length ? ["발주처"] : [])]);
+function periodDates() {
+  const f = $("#from").value, t = $("#to").value;
+  return dates().filter(d => (!f || d >= f) && (!t || d <= t));
+}
+function setQuick(q) {
+  quick = q;
+  $$("#quick button").forEach(b => b.setAttribute("aria-pressed", b.dataset.q === q));
+  const ds = dates(); if (!ds.length) return;
+  const n = q === "all" ? ds.length : Math.min(+q, ds.length);
+  // '갱신일'과 '최근 N일'은 공고가 있는 날 기준 (주말·휴일 건너뜀)
+  $("#to").value = ds[0]; $("#from").value = ds[n - 1];
+}
+async function loadPeriod() {
+  const ds = periodDates();
+  $("#tbody").innerHTML = `<tr><td colspan="8" class="empty">불러오는 중…</td></tr>`;
+  await Promise.all(ds.map(fetchDay));
+  ROWS = [];
+  const seen = new Map();
+  for (const d of ds) for (const b of DAYDATA[d] || []) {
+    const r = score(b, CRIT, new Date(d + "T00:00:00"));
+    const row = { ...b, score: r ? r.score : null, why: r ? r.why : [], groups: r ? r.groups : [] };
+    ROWS.push(row);
+    if (r) {   // 추천 탭: 같은 공고의 최신 차수만, 오늘 기준으로 다시 판정
+      const now = score(b, CRIT, today), prev = seen.get(b.bidNtceNo);
+      const keep = { ...row, open: !!now, ...(now || {}) };
+      if (!prev || b.bidNtceOrd > prev.bidNtceOrd) seen.set(b.bidNtceNo, keep);
+    }
+  }
+  RECS = [...seen.values()].sort((a, b) => b.score - a.score || (a.bidClseDate || "9").localeCompare(b.bidClseDate || "9"));
+  fillSelect($("#dt"), [...new Set(ROWS.map(b => b.bsnsDivNm || "기타"))].sort());
   fillSelect($("#rt"), [...new Set(RECS.map(b => b.bsnsDivNm || "기타"))].sort());
-  renderStats(); renderRecs();
-  if (curDay) renderDays(), renderTable();
-  const kw = (CRIT.keyword_groups || []).map(g => g.name).join(", ");
-  $("#foot").textContent = `데이터: 조달청 나라장터 공공데이터개방표준서비스 (입찰공고정보) · 추천 기준: ${kw}${(CRIT.agencies || []).length ? ", 발주처 " + CRIT.agencies.length + "곳" : ""} · 추천은 최근 ${RECENT_DAYS}일 공고 기준`;
+  fillSelect($("#rg"), [...(CRIT.keyword_groups || []).map(g => g.name), ...((CRIT.agencies || []).length ? ["발주처"] : [])]);
+  const f = $("#from").value, t = $("#to").value;
+  $("#avail").textContent = ds.length ? `${f === t ? f : f + " ~ " + t} · 공고가 있는 날 ${ds.length}일` : "선택한 기간에 수집된 공고가 없습니다";
+  shown = PAGE; renderStats(); renderTable(); renderRecs();
 }
 
+/* ---------- 요약 ---------- */
 function renderStats() {
-  const last = META.days[0] || { total: 0, date: "-" };
-  const hot = RECS.filter(b => dleft(b.bidClseDate) <= 3).length;
+  const recN = ROWS.filter(b => b.score != null).length;
+  const hot = RECS.filter(b => b.open && dleft(b.bidClseDate) <= 3).length;
   $("#stats").innerHTML = [
-    [last.total.toLocaleString(), `${last.date} 새 공고`, ""],
-    [RECS.length, "진행 중인 추천 공고", "rec"],
+    [ROWS.length.toLocaleString(), "기간 내 공고", ""],
+    [recN.toLocaleString(), "추천 기준 통과", "rec"],
     [hot, "3일 안에 마감되는 추천", "hot"],
-    [META.totalStored.toLocaleString(), `누적 저장 (${META.days.length}일)`, ""],
+    [META.totalStored.toLocaleString(), `보관 중 (${META.days.length}일)`, ""],
   ].map(([v, l, c]) => `<div class="stat ${c && "is-" + c}"><b>${v}</b><span>${l}</span></div>`).join("");
+  const by = {}; ROWS.forEach(b => { const k = b.bsnsDivNm || "기타"; by[k] = (by[k] || 0) + 1; });
+  $("#typesum").innerHTML = Object.entries(by).sort((a, b) => b[1] - a[1]).map(([k, v]) =>
+    `<span><i class="sw" style="background:${TYPE_COLOR[k] || "var(--muted)"}"></i>${esc(k)} <b>${v.toLocaleString()}</b></span>`).join("");
 }
 
+/* ---------- 공고 목록 ---------- */
+const stamp = b => (b.bidNtceDate || "") + " " + (b.bidNtceBgn || "");
+const SORTS = {
+  new: (a, b) => stamp(b).localeCompare(stamp(a)),
+  score: (a, b) => (b.score ?? -1) - (a.score ?? -1) || stamp(b).localeCompare(stamp(a)),
+  close: (a, b) => (a.bidClseDate + a.bidClseTm || "9").localeCompare(b.bidClseDate + b.bidClseTm || "9"),
+  budget: (a, b) => (+b.asignBdgtAmt || 0) - (+a.asignBdgtAmt || 0),
+};
+function renderTable() {
+  const q = $("#dq").value.trim().toLowerCase(), t = $("#dt").value, only = $("#donly").checked;
+  LIST = ROWS.filter(b => match(b, q) && (!t || (b.bsnsDivNm || "기타") === t) && (!only || b.score != null));
+  LIST.sort(SORTS[$("#dsort").value]);
+  $("#dcount").textContent = `${LIST.length.toLocaleString()} / ${ROWS.length.toLocaleString()}건`;
+  $("#tbody").innerHTML = LIST.length ? LIST.slice(0, shown).map((b, i) => `
+    <tr class="row ${b.score == null ? "dim" : ""}" data-i="${i}">
+      <td>${b.score != null ? `<span class="sc">${b.score}</span>` : ""}</td>
+      <td class="t">${esc((b.bidNtceDate || "").slice(5))} ${esc(b.bidNtceBgn)}</td>
+      <td>${esc(b.bidNtceNm)}${b.bidNtceSttusNm && b.bidNtceSttusNm !== "일반공고" ? ` <span class="chip">${esc(b.bidNtceSttusNm)}</span>` : ""}</td>
+      <td style="white-space:nowrap">${esc(b.bsnsDivNm)}</td>
+      <td>${esc(b.ntceInsttNm)}</td>
+      <td class="n">${won(b.asignBdgtAmt)}</td>
+      <td class="d">${esc((b.bidClseDate || "").slice(5))} ${esc(b.bidClseTm)}</td>
+      <td><a class="out" href="${esc(b.bidNtceUrl)}" target="_blank" rel="noopener">공고 ↗</a></td>
+    </tr>`).join("") : `<tr><td colspan="8" class="empty">조건에 맞는 공고가 없습니다.</td></tr>`;
+  const rest = LIST.length - shown;
+  $("#more").hidden = rest <= 0;
+  $("#more").innerHTML = rest > 0 ? `${shown.toLocaleString()}건까지 표시했습니다. <button class="btn" type="button" id="moreBtn">${Math.min(rest, PAGE)}건 더 보기</button> 전체는 엑셀로 받을 수 있습니다.` : "";
+}
+function onRowClick(e) {
+  const tr = e.target.closest("tr.row"); if (!tr || e.target.closest("a")) return;
+  const open = tr.nextElementSibling?.classList.contains("detail");
+  $$("tr.detail").forEach(x => x.remove()); $$("tr.row.on").forEach(x => x.classList.remove("on"));
+  if (open) return;
+  const b = LIST[+tr.dataset.i]; tr.classList.add("on");
+  const f = [["공고번호", `${b.bidNtceNo}-${b.bidNtceOrd}`], ["수요기관", b.dmndInsttNm], ["계약방법", b.cntrctCnclsMthdNm],
+    ["낙찰방법", b.bidwinrDcsnMthdNm], ["추정가격", won(b.presmptPrce)], ["참가등록마감", `${b.bidPrtcptQlfctRgstClseDate} ${b.bidPrtcptQlfctRgstClseTm}`],
+    ["개찰", `${b.opengDate} ${b.opengTm}`], ["지역제한", b.rgnLmtYn === "Y" ? (b.prtcptPsblRgnNm || "있음") : "없음"],
+    ["업종제한", b.indstrytyLmtYn === "Y" ? (b.bidprcPsblIndstrytyNm || "있음") : "없음"],
+    ["판정", (b.why || []).map(w => (w.g ? w.g + ": " : "") + w.t).join(" / ") || "기준에 맞는 키워드 없음"]];
+  tr.insertAdjacentHTML("afterend", `<tr class="detail"><td colspan="8"><dl class="dl">${f.map(([k, v]) =>
+    `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl></td></tr>`);
+}
+
+/* ---------- 추천 공고 ---------- */
+function recList() {
+  const q = $("#rq").value.trim().toLowerCase(), g = $("#rg").value, t = $("#rt").value;
+  const openOnly = $("#ropen").checked, soon = $("#rsoon").checked;
+  return RECS.filter(b => match(b, q) && (!g || b.groups.includes(g)) && (!t || b.bsnsDivNm === t)
+    && (!openOnly || b.open) && (!soon || (dleft(b.bidClseDate) ?? 99) <= 7));
+}
 function renderRecs() {
-  const q = $("#rq").value.trim().toLowerCase(), g = $("#rg").value, t = $("#rt").value, soon = $("#rsoon").checked;
-  const list = RECS.filter(b => match(b, q) && (!g || b.groups.includes(g)) && (!t || b.bsnsDivNm === t) && (!soon || dleft(b.bidClseDate) <= 7));
+  const list = recList();
   $("#rcount").textContent = `${list.length}건`;
-  $("#recs").innerHTML = list.length ? list.slice(0, 200).map(b => `
+  $("#recs").innerHTML = list.length ? list.slice(0, 300).map(b => `
     <article class="rec">
       <div class="score">${b.score}</div>
       <h3><a href="${esc(b.bidNtceUrl)}" target="_blank" rel="noopener">${esc(b.bidNtceNm)}</a></h3>
@@ -366,221 +429,140 @@ function renderRecs() {
         <span>배정예산 <span class="num">${won(b.asignBdgtAmt)}</span></span>
         <span>${esc(b.cntrctCnclsMthdNm)} · ${esc(b.bidwinrDcsnMthdNm)}</span>
         <span>마감 <span class="num">${esc(b.bidClseDate)} ${esc(b.bidClseTm)}</span></span>
-        <span>공고일 <span class="num">${esc(b.bidNtceDate)}</span></span>
+        <span>공고 <span class="num">${esc(b.bidNtceDate)} ${esc(b.bidNtceBgn)}</span></span>
       </div>
       <div class="why">${whyChips(b.why)}</div>
-    </article>`).join("") : `<div class="empty">조건에 맞는 추천 공고가 없습니다. 추천 기준 탭에서 키워드를 늘려 보세요.</div>`;
+    </article>`).join("") : `<div class="empty">이 기간에 조건에 맞는 추천 공고가 없습니다. 기간을 넓혀 보세요.</div>`;
 }
 
-/* ---------- 일일 정리 ---------- */
-function dayRows(date) {
-  const ref = new Date(date + "T00:00:00");
-  return (DAYDATA[date] || []).map(b => { const r = score(b, CRIT, ref); return { ...b, score: r ? r.score : null, why: r ? r.why : [] }; });
-}
-function renderDays() {
-  const max = Math.max(...META.days.map(d => d.total), 1);
-  $("#days").innerHTML = META.days.map(d => {
-    const n = DAYDATA[d.date] ? dayRows(d.date).filter(b => b.score != null).length : null;
-    const segs = Object.entries(d.byType).map(([k, v]) => `<i style="width:${v / max * 100}%;background:${TYPE_COLOR[k] || "var(--muted)"}"></i>`).join("");
-    return `<button class="day" aria-pressed="${d.date === curDay}" data-d="${d.date}">
-      <b>${d.date.slice(5).replace("-", ".")}</b><span>공고 ${d.total}${n != null ? " · 추천 " + n : ""}</span><div class="bar">${segs}</div></button>`;
-  }).join("");
-}
-async function fetchDay(date) {
-  if (!DAYDATA[date]) {
-    try { DAYDATA[date] = await (await fetch(`${DATA_BASE}days/${date.replaceAll("-", "")}.json`)).json(); }
-    catch (e) { DAYDATA[date] = []; }
+/* ---------- 엑셀 (외부 라이브러리 없이 .xlsx 직접 생성) ---------- */
+const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(u) { let c = 0xFFFFFFFF; for (let i = 0; i < u.length; i++) c = CRC[(c ^ u[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+function zip(files) {   // 압축 없는(store) zip
+  const enc = new TextEncoder(), parts = [], dir = []; let off = 0;
+  for (const [name, text] of files) {
+    const n = enc.encode(name), d = enc.encode(text), c = crc32(d);
+    const h = new DataView(new ArrayBuffer(30));
+    [[0, 0x04034b50, 4], [4, 20, 2], [6, 0x0800, 2], [14, c, 4], [18, d.length, 4], [22, d.length, 4], [26, n.length, 2]]
+      .forEach(([o, v, l]) => l === 4 ? h.setUint32(o, v, true) : h.setUint16(o, v, true));
+    parts.push(h.buffer, n, d);
+    const e = new DataView(new ArrayBuffer(46));
+    [[0, 0x02014b50, 4], [4, 20, 2], [6, 20, 2], [8, 0x0800, 2], [16, c, 4], [20, d.length, 4], [24, d.length, 4], [28, n.length, 2], [42, off, 4]]
+      .forEach(([o, v, l]) => l === 4 ? e.setUint32(o, v, true) : e.setUint16(o, v, true));
+    dir.push(e.buffer, n);
+    off += 30 + n.length + d.length;
   }
-  return DAYDATA[date];
+  const size = dir.reduce((s, x) => s + (x.byteLength ?? x.length), 0), end = new DataView(new ArrayBuffer(22));
+  [[0, 0x06054b50, 4], [8, files.length, 2], [10, files.length, 2], [12, size, 4], [16, off, 4]]
+    .forEach(([o, v, l]) => l === 4 ? end.setUint32(o, v, true) : end.setUint16(o, v, true));
+  return new Blob([...parts, ...dir, end.buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
 }
-async function loadDay(date) {
-  curDay = date;
-  $("#tbody").innerHTML = `<tr><td colspan="8" class="empty">불러오는 중…</td></tr>`;
-  await fetchDay(date);
-  renderDays(); renderTable();
+const xe = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])).replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "");
+const colName = i => { let s = ""; for (i++; i; i = Math.floor((i - 1) / 26)) s = String.fromCharCode(65 + (i - 1) % 26) + s; return s; };
+const XCOLS = [
+  ["추천점수", 8, b => b.score ?? "", 1], ["공고일", 11, b => b.bidNtceDate], ["공고시각", 8, b => b.bidNtceBgn], ["공고명", 60, b => b.bidNtceNm],
+  ["공고상태", 10, b => b.bidNtceSttusNm], ["업무구분", 8, b => b.bsnsDivNm], ["공고기관", 26, b => b.ntceInsttNm], ["수요기관", 26, b => b.dmndInsttNm],
+  ["배정예산(원)", 14, b => toInt(b.asignBdgtAmt) || "", 2], ["추정가격(원)", 14, b => toInt(b.presmptPrce) || "", 2],
+  ["참가등록마감", 17, b => `${b.bidPrtcptQlfctRgstClseDate || ""} ${b.bidPrtcptQlfctRgstClseTm || ""}`.trim()],
+  ["입찰마감", 17, b => `${b.bidClseDate || ""} ${b.bidClseTm || ""}`.trim()], ["개찰", 17, b => `${b.opengDate || ""} ${b.opengTm || ""}`.trim()],
+  ["계약방법", 14, b => b.cntrctCnclsMthdNm], ["낙찰방법", 18, b => b.bidwinrDcsnMthdNm],
+  ["지역제한", 18, b => b.rgnLmtYn === "Y" ? (b.prtcptPsblRgnNm || "있음") : ""], ["업종제한", 30, b => b.indstrytyLmtYn === "Y" ? (b.bidprcPsblIndstrytyNm || "있음") : ""],
+  ["추천 사유", 40, b => (b.why || []).map(w => (w.g ? w.g + ": " : "") + w.t).join(" / ")],
+  ["공고번호", 18, b => `${b.bidNtceNo}-${b.bidNtceOrd}`], ["공고 보기", 10, b => b.bidNtceUrl ? "공고 보기" : ""],
+];
+function sheetXml(rows) {
+  const last = colName(XCOLS.length - 1), cell = (r, c, v, num, st) => {
+    const ref = colName(c) + r;
+    if (v === "" || v == null) return st ? `<c r="${ref}" s="${st}"/>` : "";
+    return num && typeof v === "number" ? `<c r="${ref}" s="${num === 2 ? 2 : 0}"><v>${v}</v></c>` : `<c r="${ref}" t="inlineStr"${st ? ` s="${st}"` : ""}><is><t xml:space="preserve">${xe(v)}</t></is></c>`;
+  };
+  const head = `<row r="1">${XCOLS.map(([h], c) => cell(1, c, h, 0, 1)).join("")}</row>`;
+  const body = rows.map((b, i) => `<row r="${i + 2}">${XCOLS.map(([, , f, num], c) => cell(i + 2, c, f(b), num, c === XCOLS.length - 1 && b.bidNtceUrl ? 3 : 0)).join("")}</row>`).join("");
+  const links = rows.map((b, i) => b.bidNtceUrl ? `<hyperlink ref="${last}${i + 2}" r:id="h${i}"/>` : "").join("");
+  const xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">`
+    + `<sheetViews><sheetView workbookViewId="0"><pane xSplit="0" ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>`
+    + `<cols>${XCOLS.map(([, w], c) => `<col min="${c + 1}" max="${c + 1}" width="${w}" customWidth="1"/>`).join("")}</cols>`
+    + `<sheetData>${head}${body}</sheetData><autoFilter ref="A1:${last}${rows.length + 1}"/>${links ? `<hyperlinks>${links}</hyperlinks>` : ""}</worksheet>`;
+  const rels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">`
+    + rows.map((b, i) => b.bidNtceUrl ? `<Relationship Id="h${i}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="${xe(b.bidNtceUrl)}" TargetMode="External"/>` : "").join("") + `</Relationships>`;
+  return [xml, rels];
 }
-let DAYLIST = [];
-function renderTable() {
-  const rows = dayRows(curDay), info = META.days.find(d => d.date === curDay);
-  $("#typesum").innerHTML = Object.entries(info.byType).map(([k, v]) =>
-    `<span><i class="sw" style="background:${TYPE_COLOR[k] || "var(--muted)"}"></i>${esc(k)} <b>${v}</b></span>`).join("")
-    + `<span>추천 기준 통과 <b style="color:var(--accent)">${rows.filter(b => b.score != null).length}</b></span>`;
-  fillSelect($("#dt"), [...new Set(rows.map(b => b.bsnsDivNm || "기타"))].sort());
-  const q = $("#dq").value.trim().toLowerCase(), t = $("#dt").value, only = $("#donly").checked;
-  const list = rows.filter(b => match(b, q) && (!t || b.bsnsDivNm === t) && (!only || b.score != null));
-  const key = { score: b => -(b.score ?? -1), budget: b => -(+b.asignBdgtAmt || 0), close: b => b.bidClseDate || "9" }[sortKey];
-  list.sort((a, b) => { const x = key(a), y = key(b); return x < y ? -1 : x > y ? 1 : 0; });
-  DAYLIST = list;
-  $("#dcount").textContent = `${list.length} / ${rows.length}건`;
-  $("#tbody").innerHTML = list.length ? list.map((b, i) => `
-    <tr class="row ${b.score == null ? "dim" : ""}" data-i="${i}">
-      <td>${b.score != null ? `<span class="sc">${b.score}</span>` : ""}</td>
-      <td>${esc(b.bidNtceNm)}${b.bidNtceSttusNm && b.bidNtceSttusNm !== "일반공고" ? ` <span class="chip">${esc(b.bidNtceSttusNm)}</span>` : ""}</td>
-      <td style="white-space:nowrap">${esc(b.bsnsDivNm)}</td>
-      <td>${esc(b.ntceInsttNm)}</td>
-      <td class="n">${won(b.asignBdgtAmt)}</td>
-      <td class="d">${esc((b.bidClseDate || "").slice(5))} ${esc(b.bidClseTm)}</td>
-      <td>${esc(b.cntrctCnclsMthdNm)}</td>
-      <td><a class="out" href="${esc(b.bidNtceUrl)}" target="_blank" rel="noopener">공고 ↗</a></td>
-    </tr>`).join("") : `<tr><td colspan="8" class="empty">조건에 맞는 공고가 없습니다.</td></tr>`;
+function makeXlsx(sheets) {
+  const R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships", P = "http://schemas.openxmlformats.org/package/2006/relationships";
+  const files = [
+    ["[Content_Types].xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${sheets.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join("")}</Types>`],
+    ["_rels/.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="${P}"><Relationship Id="r1" Type="${R}/officeDocument" Target="xl/workbook.xml"/></Relationships>`],
+    ["xl/workbook.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="${R}"><sheets>${sheets.map((s, i) => `<sheet name="${xe(s.name)}" sheetId="${i + 1}" r:id="s${i + 1}"/>`).join("")}</sheets>${sheets.map((s, i) => `<definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="${i}" hidden="1">'${xe(s.name)}'!$A$1:$${colName(XCOLS.length - 1)}$${s.rows.length + 1}</definedName></definedNames>`).slice(0, 1).join("")}</workbook>`],
+    ["xl/_rels/workbook.xml.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="${P}">${sheets.map((_, i) => `<Relationship Id="s${i + 1}" Type="${R}/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join("")}<Relationship Id="st" Type="${R}/styles" Target="styles.xml"/></Relationships>`],
+    ["xl/styles.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="#,##0"/></numFmts><fonts count="3"><font><sz val="10"/><name val="맑은 고딕"/></font><font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="맑은 고딕"/></font><font><u/><sz val="10"/><color rgb="FF0563C1"/><name val="맑은 고딕"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF0B6B63"/></patternFill></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`],
+  ];
+  sheets.forEach((s, i) => { const [x, r] = sheetXml(s.rows); files.push([`xl/worksheets/sheet${i + 1}.xml`, x], [`xl/worksheets/_rels/sheet${i + 1}.xml.rels`, r]); });
+  return zip(files);
 }
-function onRowClick(e) {
-  const tr = e.target.closest("tr.row"); if (!tr || e.target.closest("a")) return;
-  const open = tr.nextElementSibling?.classList.contains("detail");
-  document.querySelectorAll("tr.detail").forEach(x => x.remove());
-  document.querySelectorAll("tr.row.on").forEach(x => x.classList.remove("on"));
-  if (open) return;
-  const b = DAYLIST[+tr.dataset.i]; tr.classList.add("on");
-  const f = [["공고번호", `${b.bidNtceNo}-${b.bidNtceOrd}`], ["수요기관", b.dmndInsttNm], ["낙찰방법", b.bidwinrDcsnMthdNm],
-    ["추정가격", won(b.presmptPrce)], ["참가등록마감", `${b.bidPrtcptQlfctRgstClseDate} ${b.bidPrtcptQlfctRgstClseTm}`],
-    ["개찰", `${b.opengDate} ${b.opengTm}`], ["지역제한", b.rgnLmtYn === "Y" ? (b.prtcptPsblRgnNm || "있음") : "없음"],
-    ["업종제한", b.indstrytyLmtYn === "Y" ? (b.bidprcPsblIndstrytyNm || "있음") : "없음"],
-    ["판정", (b.why || []).map(w => (w.g ? w.g + ": " : "") + w.t).join(" / ") || "기준에 맞는 키워드 없음"]];
-  tr.insertAdjacentHTML("afterend", `<tr class="detail"><td colspan="8"><dl class="dl">${f.map(([k, v]) =>
-    `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl></td></tr>`);
+function downloadExcel() {
+  const recTab = !$("#p-rec").hidden;
+  const sheets = recTab ? [{ name: "추천 공고", rows: recList() }]
+    : [{ name: "공고 목록", rows: LIST }, { name: "추천만", rows: LIST.filter(b => b.score != null).sort(SORTS.score) }];
+  const f = $("#from").value.replaceAll("-", ""), t = $("#to").value.replaceAll("-", "");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(makeXlsx(sheets));
+  a.download = `NARA_${recTab ? "recommended" : "bids"}_${f === t ? f : f + "-" + t}.xlsx`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  toast(`${sheets[0].rows.length.toLocaleString()}건을 엑셀로 받았습니다. 지금 보이는 검색·필터 조건이 그대로 적용됩니다.`);
 }
 
-/* ---------- 추천 기준 편집 ---------- */
-const splitIn = v => v.split(/[,\n\t]+/).map(x => x.trim()).filter(Boolean);
-function chipList(arr, path, cls = "") {
-  return arr.map((k, i) => `<span class="kchip ${cls}">${esc(k)}<button type="button" aria-label="${esc(k)} 삭제" data-del="${path}" data-i="${i}">×</button></span>`).join("")
-    || `<span class="hint">비어 있음</span>`;
+/* ---------- 갱신 ---------- */
+let tt; function toast(t) { const el = $("#toast"); el.textContent = t; el.hidden = false; clearTimeout(tt); tt = setTimeout(() => el.hidden = true, 4000); }
+async function loadMeta() {
+  META = await (await fetch(DATA_BASE + "index.json" + bust, { cache: "no-cache" })).json();
+  CRIT = META.criteria || {};
+  $("#gen").textContent = `마지막 수집 ${META.generated.replace("T", " ")} · 오늘 공고는 2시간마다 자동 수집`;
+  const ds = dates();
+  ["#from", "#to"].forEach(s => { $(s).min = ds[ds.length - 1] || ""; $(s).max = ds[0] || ""; });
+  const kw = (CRIT.keyword_groups || []).map(g => g.name).join(", ");
+  $("#foot").textContent = `데이터: 조달청 나라장터 공공데이터개방표준서비스 (입찰공고정보) · 추천 기준: ${kw}${(CRIT.agencies || []).length ? ", 발주처 " + CRIT.agencies.length + "곳" : ""}`;
 }
-function renderCrit() {
-  const d = DRAFT;
-  $("#groups").innerHTML = (d.keyword_groups || []).map((g, gi) => `
-    <div class="cbox">
-      <h3><input value="${esc(g.name)}" data-gname="${gi}" aria-label="그룹 이름"><span class="chip">${g.keywords.length}개</span>
-        <button class="btn danger" type="button" data-gdel="${gi}">그룹 삭제</button></h3>
-      <div class="chips">${chipList(g.keywords, "g" + gi)}</div>
-      <div class="addrow"><input id="gin${gi}" data-gin="${gi}" placeholder="키워드 입력 후 Enter (쉼표로 여러 개)"><button class="btn" type="button" data-gadd="${gi}">추가</button></div>
-    </div>`).join("");
-  $("#agencies").innerHTML = chipList(d.agencies || [], "agencies", "ag");
-  $("#regions").innerHTML = chipList(d.regions || [], "regions", "ag");
-  $("#excl").innerHTML = chipList(d.exclude_keywords || [], "exclude_keywords", "ag");
-  $("#types").innerHTML = TYPES.map(t => `<label><input type="checkbox" value="${t}" ${(d.business_types || []).includes(t) ? "checked" : ""}> ${t}</label>`).join("");
-  $("#minB").value = Math.round((d.min_budget || 0) / 1e4); $("#maxB").value = Math.round((d.max_budget || 0) / 1e4);
-  $("#minD").value = d.min_days_to_deadline ?? 1;
-  draftChanged(false);
-}
-function draftChanged(rerender = true) {
-  if (rerender) renderCrit();
-  const dirty = JSON.stringify(DRAFT) !== JSON.stringify(SAVED);
-  const n = computeRecs(DRAFT).length;
-  $("#save").disabled = !dirty || !CAN_SAVE; $("#reset").disabled = !dirty;
-  const m = $("#smsg"); m.classList.remove("err");
-  m.innerHTML = `이 기준이면 진행 중인 공고 중 <b>${n}</b>건을 추천합니다.` + (dirty ? (CAN_SAVE ? " 저장하지 않은 변경이 있습니다." : " 이 화면에서 저장할 권한이 없어 미리보기만 됩니다.") : "");
-  CRIT = DRAFT; refreshAll();
-}
-function getArr(path) {
-  if (path.startsWith("g")) return DRAFT.keyword_groups[+path.slice(1)].keywords;
-  return (DRAFT[path] = DRAFT[path] || []);
-}
-function addTo(path, inputEl) {
-  const arr = getArr(path), vals = splitIn(inputEl.value).filter(v => !arr.includes(v));
-  if (!vals.length) return;
-  arr.push(...vals); inputEl.value = ""; draftChanged();
-  const again = path.startsWith("g") ? $("#gin" + path.slice(1)) : inputEl; again?.focus();
-}
-function bindCrit() {
-  const p = $("#p-crit");
-  p.addEventListener("click", e => {
-    const t = e.target;
-    if (t.dataset.del) { getArr(t.dataset.del).splice(+t.dataset.i, 1); draftChanged(); }
-    else if (t.dataset.gadd) addTo("g" + t.dataset.gadd, $("#gin" + t.dataset.gadd));
-    else if (t.dataset.gdel) { DRAFT.keyword_groups.splice(+t.dataset.gdel, 1); draftChanged(); }
-  });
-  p.addEventListener("keydown", e => {
-    if (e.key !== "Enter" || e.isComposing) return;
-    const t = e.target;
-    if (t.dataset.gin) { e.preventDefault(); addTo("g" + t.dataset.gin, t); }
-    else if (t.id === "agIn") { e.preventDefault(); addTo("agencies", t); }
-    else if (t.id === "rgIn") { e.preventDefault(); addTo("regions", t); }
-    else if (t.id === "exIn") { e.preventDefault(); addTo("exclude_keywords", t); }
-  });
-  p.addEventListener("change", e => {
-    const t = e.target;
-    if (t.dataset.gname) { DRAFT.keyword_groups[+t.dataset.gname].name = t.value.trim() || "이름 없음"; draftChanged(); }
-    else if (t.closest("#types")) { DRAFT.business_types = [...document.querySelectorAll("#types input:checked")].map(x => x.value); draftChanged(false); }
-    else if (t.id === "minB") { DRAFT.min_budget = Math.max(0, +t.value || 0) * 1e4; draftChanged(false); }
-    else if (t.id === "maxB") { DRAFT.max_budget = Math.max(0, +t.value || 0) * 1e4; draftChanged(false); }
-    else if (t.id === "minD") { DRAFT.min_days_to_deadline = Math.max(0, +t.value || 0); draftChanged(false); }
-  });
-  $("#agAdd").onclick = () => addTo("agencies", $("#agIn"));
-  $("#rgAdd").onclick = () => addTo("regions", $("#rgIn"));
-  $("#exAdd").onclick = () => addTo("exclude_keywords", $("#exIn"));
-  $("#addGroup").onclick = () => { DRAFT.keyword_groups.push({ name: "새 그룹", keywords: [] }); draftChanged(); $("#gin" + (DRAFT.keyword_groups.length - 1))?.focus(); };
-  $("#reset").onclick = () => { DRAFT = clone(SAVED); draftChanged(); };
-  $("#save").onclick = save;
-}
-async function save() {
-  const m = $("#smsg");
-  if (!DB) { m.textContent = "저장소에 연결되지 않아 저장하지 못했습니다. 잠시 뒤 다시 열어 주세요."; m.classList.add("err"); return; }
-  $("#save").disabled = true; m.textContent = "저장 중…";
-  const body = { ...clone(DRAFT), updated_at: new Date().toISOString() };
+async function refresh() {
+  const btn = $("#refresh"), before = META?.generated;
+  btn.disabled = true; btn.classList.add("spin");
   try {
-    await DB.doc("settings/criteria").set(body);
-    SAVED = clone(DRAFT); draftChanged(false);
-    m.innerHTML = `저장했습니다. 다음 아침 수집부터 이 기준으로 추천합니다.`;
-  } catch (e) {
-    if (e?.code === "invalid_argument") { CAN_SAVE = false; m.textContent = "이 화면에서 기준을 저장할 권한이 없습니다. 소유자에게 요청해 주세요."; }
-    else m.textContent = "저장하지 못했습니다. 잠시 뒤 다시 눌러 주세요.";
-    m.classList.add("err"); $("#save").disabled = !CAN_SAVE;
-  }
-}
-async function connectDb() {
-  const db = window.claude?.use ? await window.claude.use("db").catch(() => null) : null;
-  if (!db) return;
-  DB = db;
-  const user = await window.claude.use("user").catch(() => null);
-  if (user) { try { const w = await user.can("data.write"); if (w === false) CAN_SAVE = false; } catch (e) {} }
-  db.doc("settings/criteria").onSnapshot(snap => {
-    if (!snap.exists) return;
-    const { updated_at, ...c } = snap.data();
-    const fresh = clone(c);
-    const wasDirty = JSON.stringify(DRAFT) !== JSON.stringify(SAVED);
-    SAVED = fresh;
-    if (!wasDirty) { DRAFT = clone(fresh); }
-    renderCrit(); CRIT = DRAFT; refreshAll();
-  }, () => {});
+    bust = "?t=" + Date.now(); DAYDATA = {};
+    await loadMeta();
+    if (quick) setQuick(quick);
+    await loadPeriod();
+    toast(META.generated !== before ? `새 수집 결과(${META.generated.replace("T", " ")})를 불러왔습니다.` : "이미 최신입니다. 다음 자동 수집 뒤에 다시 눌러 보세요.");
+  } catch (e) { toast("불러오지 못했습니다. 잠시 뒤 다시 눌러 주세요."); }
+  finally { btn.disabled = false; btn.classList.remove("spin"); }
 }
 
-/* ---------- 탭 · 시작 ---------- */
+/* ---------- 시작 ---------- */
 function setTab(name) {
-  for (const [id, pid] of [["rec", "p-rec"], ["day", "p-day"], ["crit", "p-crit"]]) {
-    $("#tab-" + id).setAttribute("aria-selected", id === name); $("#" + pid).hidden = id !== name;
-  }
-  try { localStorage.setItem("tab", name); } catch (e) {}
-  if (name === "day" && !curDay && META.days.length) loadDay(META.days[0].date);
+  for (const id of ["list", "rec"]) { $("#tab-" + id).setAttribute("aria-selected", id === name); $("#p-" + id).hidden = id !== name; }
 }
 async function init() {
-  try { META = await (await fetch(DATA_BASE + "index.json", { cache: "no-cache" })).json(); }
+  try { await loadMeta(); }
   catch (e) {
     $("#gen").textContent = "";
-    $("#stats").outerHTML = `<div class="empty">아직 데이터가 없습니다. <code>python3 nara_bids.py daily</code> 를 실행하면 이 화면이 채워집니다.</div>`;
+    $("#stats").outerHTML = `<div class="empty">아직 수집된 데이터가 없습니다. 첫 자동 수집 뒤에 다시 열어 주세요.</div>`;
     return;
   }
-  SAVED = clone(META.criteria || {}); SAVED.keyword_groups = SAVED.keyword_groups || []; DRAFT = clone(SAVED); CRIT = DRAFT;
-  $("#gen").textContent = `갱신 ${META.generated.replace("T", " ")}`;
-  if (META.sample) {
-    $("#banner").hidden = false;
-    $("#banner").innerHTML = `지금은 화면 확인용 <b>가상 샘플 공고</b>입니다. 실제 나라장터 공고가 아닙니다. 추천 기준은 보내주신 키워드로 설정돼 있습니다.`;
-  }
-  await Promise.all(META.days.slice(0, RECENT_DAYS).map(d => fetchDay(d.date)));
-  bindCrit(); renderCrit(); refreshAll();
-  ["#rq", "#rg", "#rt", "#rsoon"].forEach(s => $(s).addEventListener("input", renderRecs));
-  ["#dq", "#dt", "#donly"].forEach(s => $(s).addEventListener("input", renderTable));
+  setQuick("1");
+  ["#dq", "#dt", "#dsort", "#donly"].forEach(s => $(s).addEventListener("input", () => { shown = PAGE; renderTable(); }));
+  ["#rq", "#rg", "#rt", "#ropen", "#rsoon"].forEach(s => $(s).addEventListener("input", renderRecs));
+  $("#quick").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { setQuick(b.dataset.q); loadPeriod(); } });
+  ["#from", "#to"].forEach(s => $(s).addEventListener("change", () => {
+    if ($("#from").value && $("#to").value && $("#from").value > $("#to").value) [$("#from").value, $("#to").value] = [$("#to").value, $("#from").value];
+    quick = null; $$("#quick button").forEach(b => b.setAttribute("aria-pressed", "false")); loadPeriod();
+  }));
   $("#tbody").addEventListener("click", onRowClick);
-  $("#days").addEventListener("click", e => { const b = e.target.closest(".day"); if (b) loadDay(b.dataset.d); });
-  document.querySelectorAll("th button").forEach(b => b.addEventListener("click", () => { sortKey = b.dataset.k; renderTable(); }));
-  ["rec", "day", "crit"].forEach(n => $("#tab-" + n).onclick = () => setTab(n));
-  // 공개 사이트(claude.ai 밖)에서는 기준 저장소가 없으니 '추천 기준' 탭을 숨김
-  const TABS = window.claude?.use ? ["rec", "day", "crit"] : ["rec", "day"];
-  if (TABS.length === 2) $("#tab-crit").hidden = true;
-  let t = null; try { t = localStorage.getItem("tab"); } catch (e) {}
-  const h = location.hash.slice(1);
-  setTab(TABS.includes(h) ? h : TABS.includes(t) ? t : "rec");
-  connectDb();
+  $("#more").addEventListener("click", e => { if (e.target.id === "moreBtn") { shown += PAGE; renderTable(); } });
+  ["list", "rec"].forEach(n => $("#tab-" + n).onclick = () => setTab(n));
+  $("#refresh").onclick = refresh;
+  $("#excel").onclick = downloadExcel;
+  await loadPeriod();
 }
 init();
 </script>
+</body>
+</html>

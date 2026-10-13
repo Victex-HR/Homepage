@@ -35,7 +35,8 @@ DATA = os.environ.get("NARA_DATA_DIR") or os.path.join(BASE, "..", "data")   # n
 DAYS = os.path.join(DATA, "days")
 OUT = os.path.join(BASE, "out")
 KST = dt.timezone(dt.timedelta(hours=9))
-KEEP_DAYS = 30          # 사이트에 남겨 둘 공고일 수
+KEEP_DAYS = 60          # 사이트에 남겨 둘 공고일 수
+TODAY_EVERY_H = 2       # 오늘 공고를 다시 받는 간격
 SEND_WINDOW_H = 3       # 예정 시각이 지나고 이 시간 안이면 보냄 (GitHub 실행 지연 대비)
 PAGE_URL = os.environ.get("SITE_URL", "")
 
@@ -75,7 +76,14 @@ def slim(items, cfg, iso):
     return out
 
 
-def rebuild_index(cfg):
+def load_meta():
+    try:
+        return json.load(open(os.path.join(DATA, "index.json"), encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def rebuild_index(cfg, state=None):
     """site/data/days/*.json 으로 index.json · recs.json 을 다시 만든다."""
     files = sorted(glob.glob(os.path.join(DAYS, "*.json")), reverse=True)
     for old in files[KEEP_DAYS:]:
@@ -108,7 +116,9 @@ def rebuild_index(cfg):
     json.dump(recs, open(os.path.join(DATA, "recs.json"), "w", encoding="utf-8"),
               ensure_ascii=False, separators=(",", ":"))
     write_admin_config()
+    prev = load_meta()
     meta = {"generated": now_kst().strftime("%Y-%m-%dT%H:%M"), "sample": False, "public": True,
+            "daily_on": prev.get("daily_on"), "today_at": prev.get("today_at"), **(state or {}),
             "company": cfg.get("company_name"), "criteria": cfg, "totalStored": total, "days": index}
     json.dump(meta, open(os.path.join(DATA, "index.json"), "w", encoding="utf-8"),
               ensure_ascii=False, indent=1)
@@ -123,27 +133,25 @@ def write_admin_config():
                   open(os.path.join(DATA, "admin-config.json"), "w"))
 
 
-def update_site(days_back=3):
+def update_site(days_back=3, include_today=True, only_today=False):
+    """지난 days_back 일(어제부터)과 오늘 공고를 다시 받아 저장. only_today 면 오늘만."""
     key = os.environ.get("NARA_API_KEY")
     if not key:
         raise SystemExit("NARA_API_KEY 가 없습니다.")
     cfg = load_cfg()
     os.makedirs(DAYS, exist_ok=True)
     today = now_kst().date()
-    for i in range(days_back, 0, -1):
+    offsets = [0] if only_today else list(range(days_back, 0, -1)) + ([0] if include_today else [])
+    for i in offsets:
         d = today - dt.timedelta(days=i)
         rows = slim(fetch_day(key, d.strftime("%Y%m%d")), cfg, d.isoformat())
         json.dump(rows, open(os.path.join(DAYS, d.strftime("%Y%m%d") + ".json"), "w", encoding="utf-8"),
                   ensure_ascii=False, separators=(",", ":"))
-    rebuild_index(cfg)
-
-
-def site_updated_today():
-    try:
-        meta = json.load(open(os.path.join(DATA, "index.json"), encoding="utf-8"))
-        return meta.get("generated", "")[:10] == now_kst().date().isoformat()
-    except (OSError, ValueError):
-        return False
+    now = now_kst()
+    state = {"today_at": now.strftime("%Y-%m-%dT%H:%M")} if 0 in offsets else {}
+    if not only_today:
+        state["daily_on"] = today.isoformat()
+    rebuild_index(cfg, state)
 
 
 # ---------------------------------------------------------------- 엑셀
@@ -317,9 +325,16 @@ def tick():
     has_sb = bool(os.environ.get("SUPABASE_URL") and os.environ.get("SUPABASE_SERVICE_KEY"))
     due = due_schedules(now) if has_sb else fallback_due(now)
     changed = False
-    if not site_updated_today():
-        update_site()
+    meta = load_meta()
+    if meta.get("daily_on") != now.date().isoformat():
+        update_site()                       # 하루 한 번: 사흘 전~어제 다시 받기 + 오늘
         changed = True
+    else:
+        last = meta.get("today_at") or ""
+        if not last.startswith(now.date().isoformat()) or \
+                now - dt.datetime.fromisoformat(last).replace(tzinfo=KST) >= dt.timedelta(hours=TODAY_EVERY_H):
+            update_site(only_today=True)    # 2시간마다 오늘 공고
+            changed = True
     cfg_path = os.path.join(DATA, "admin-config.json")
     before = open(cfg_path).read() if os.path.exists(cfg_path) else ""
     write_admin_config()
