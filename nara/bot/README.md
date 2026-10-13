@@ -29,6 +29,10 @@ GitHub Actions(저장소 루트 `.github/workflows/nara.yml`)가 매시간 `nara
 3. Actions 탭에서 `NARA 입찰공고 수집·메일 발송` 을 한 번 수동 실행(Run workflow)합니다.
 4. 관리 화면에서 **가장 먼저 가입한 사람이 관리자**가 됩니다. 이후 가입자는 관리자가 '가입자' 탭에서 승인합니다.
 
+## Supabase 없이 메일만 먼저 받기
+관리 화면을 설정하기 전에도 저장소 Variables 에 `MAIL_TO`(쉼표로 여러 주소)와 `MAIL_TIME`(예: `00:00`, 비우면 자정)을
+넣으면 매일 그 시각에 보냅니다. Supabase 를 설정하면 관리 화면의 일정과 수신자가 대신 쓰입니다.
+
 ## 메일 발송 계정
 - **Gmail**: 2단계 인증을 켠 뒤 Google 계정 > 보안 > 앱 비밀번호에서 16자리 비밀번호를 만들어 `SMTP_PASSWORD` 에 넣습니다.
   `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=465`. 하루 발송 한도는 약 500통입니다.

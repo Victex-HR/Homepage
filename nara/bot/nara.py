@@ -294,10 +294,28 @@ def due_schedules(now):
     return out
 
 
+# Supabase 설정 전에는 MAIL_TO(쉼표 구분)로 매일 MAIL_TIME(기본 00:00)에 보냄. 기록은 nara-data 의 mail-state.json
+STATE = os.path.join(DATA, "mail-state.json")
+
+
+def fallback_due(now):
+    if not os.environ.get("MAIL_TO"):
+        return []
+    try:
+        last = json.load(open(STATE)).get("last_sent_on")
+    except (OSError, ValueError):
+        last = None
+    hh, mm = map(int, (os.environ.get("MAIL_TIME") or "00:00").split(":")[:2])
+    at = dt.datetime.combine(now.date(), dt.time(hh, mm), KST)
+    if last != now.date().isoformat() and at <= now < at + dt.timedelta(hours=SEND_WINDOW_H):
+        return [{"id": None, "name": "기본 일정", "fallback": True}]
+    return []
+
+
 def tick():
     now = now_kst()
     has_sb = bool(os.environ.get("SUPABASE_URL") and os.environ.get("SUPABASE_SERVICE_KEY"))
-    due = due_schedules(now) if has_sb else []
+    due = due_schedules(now) if has_sb else fallback_due(now)
     changed = False
     if not site_updated_today():
         update_site()
@@ -308,7 +326,10 @@ def tick():
     if os.path.exists(cfg_path) and open(cfg_path).read() != before:
         changed = True
     if due:
-        rcpts = [r["email"] for r in sb("GET", "recipients?select=email&active=eq.true") or []]
+        if has_sb:
+            rcpts = [r["email"] for r in sb("GET", "recipients?select=email&active=eq.true") or []]
+        else:
+            rcpts = [x.strip() for x in os.environ["MAIL_TO"].split(",") if x.strip()]
         day = (now.date() - dt.timedelta(days=1)).strftime("%Y%m%d")
         path, summary = build_excel(day)
         for s in due:
@@ -319,10 +340,15 @@ def tick():
                 send_mail(rcpts, path, summary)
             except Exception as e:  # noqa: BLE001 - 기록 후 다음 일정 진행
                 status, detail = "failed", f"{type(e).__name__}: {e}"[:500]
-            sb("POST", "send_log", {"schedule_id": s["id"], "recipients": rcpts, "status": status,
-                                    "detail": detail, "report_date": f"{day[:4]}-{day[4:6]}-{day[6:]}"})
-            if status == "sent":
-                sb("PATCH", f"schedules?id=eq.{s['id']}", {"last_sent_on": now.date().isoformat()})
+            if s.get("fallback"):
+                if status == "sent":
+                    json.dump({"last_sent_on": now.date().isoformat()}, open(STATE, "w"))
+                    changed = True
+            else:
+                sb("POST", "send_log", {"schedule_id": s["id"], "recipients": rcpts, "status": status,
+                                        "detail": detail, "report_date": f"{day[:4]}-{day[4:6]}-{day[6:]}"})
+                if status == "sent":
+                    sb("PATCH", f"schedules?id=eq.{s['id']}", {"last_sent_on": now.date().isoformat()})
             print(f"일정 '{s['name']}': {status} {detail}")
     # GitHub Actions 다음 단계에서 사이트 반영 여부 판단
     if os.environ.get("GITHUB_OUTPUT"):
