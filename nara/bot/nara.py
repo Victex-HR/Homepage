@@ -33,6 +33,7 @@ import nara_bids as nb
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.environ.get("NARA_DATA_DIR") or os.path.join(BASE, "..", "data")   # nara-data 브랜치 내용
 DAYS = os.path.join(DATA, "days")
+PRE = os.path.join(DATA, "pre")    # 사전규격 (접수일별)
 OUT = os.path.join(BASE, "out")
 KST = dt.timezone(dt.timedelta(hours=9))
 KEEP_DAYS = 60          # 사이트에 남겨 둘 공고일 수
@@ -120,6 +121,18 @@ def rebuild_index(cfg, state=None):
         json.dump(rows, open(f, "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))
         total += len(rows)
         index.append({"date": iso, "total": len(rows), "byType": by_type, "recommended": n_rec})
+    pre_index, oldest = [], index[-1]["date"].replace("-", "") if index else ""
+    for f in sorted(glob.glob(os.path.join(PRE, "*.json")), reverse=True):
+        d = os.path.basename(f)[:8]
+        if d < oldest:      # 입찰공고와 같은 기간만 보관
+            os.remove(f)
+            continue
+        rows = json.load(open(f, encoding="utf-8"))
+        for r in rows:
+            r["score"], r["why"] = nb.score(r, cfg, dt.date(int(d[:4]), int(d[4:6]), int(d[6:])))
+        json.dump(rows, open(f, "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))
+        pre_index.append({"date": f"{d[:4]}-{d[4:6]}-{d[6:]}", "total": len(rows),
+                          "recommended": sum(r["score"] is not None for r in rows)})
     recs = sorted(recs.values(), key=lambda x: (-x["score"], x["bidClseDate"] or "9999"))
     json.dump(recs, open(os.path.join(DATA, "recs.json"), "w", encoding="utf-8"),
               ensure_ascii=False, separators=(",", ":"))
@@ -127,7 +140,8 @@ def rebuild_index(cfg, state=None):
     prev = load_meta()
     meta = {"generated": now_kst().strftime("%Y-%m-%dT%H:%M"), "sample": False, "public": True,
             "daily_on": prev.get("daily_on"), "today_at": prev.get("today_at"), **(state or {}),
-            "company": cfg.get("company_name"), "criteria": cfg, "totalStored": total, "days": index}
+            "company": cfg.get("company_name"), "criteria": cfg, "totalStored": total, "days": index,
+            "pre_days": pre_index}
     json.dump(meta, open(os.path.join(DATA, "index.json"), "w", encoding="utf-8"),
               ensure_ascii=False, indent=1)
     print(f"사이트 데이터: {len(index)}일, 추천 {len(recs)}건")
@@ -141,6 +155,89 @@ def write_admin_config():
                   open(os.path.join(DATA, "admin-config.json"), "w"))
 
 
+# ---------------------------------------------------------------- 사전규격
+PRE_URL = "https://apis.data.go.kr/1230000/ao/HrcspSsstndrdInfoService/"
+PRE_OPS = {"getPublicPrcureThngInfoThng": "물품", "getPublicPrcureThngInfoServc": "용역",
+           "getPublicPrcureThngInfoCnstwk": "공사", "getPublicPrcureThngInfoFrgcpt": "외자"}
+
+
+def pre_page(key, op, begin, end, page):
+    q = urllib.parse.urlencode({"ServiceKey": key, "numOfRows": nb.PAGE_SIZE, "pageNo": page, "type": "json",
+                                "inqryDiv": 1, "inqryBgnDt": begin, "inqryEndDt": end})
+    for attempt in range(8):
+        try:
+            with urllib.request.urlopen(f"{PRE_URL}{op}?{q}", timeout=30) as r:
+                data = json.loads(r.read().decode("utf-8"))
+            break
+        except (OSError, ValueError) as e:
+            if attempt == 7:
+                raise RuntimeError(f"사전규격 API 호출 실패: {e}")
+            nb.time.sleep(min(30, 2 ** (attempt + 1)))
+    if "OpenAPI_ServiceResponse" in data:   # 활용신청이 안 된 키 등
+        h = data["OpenAPI_ServiceResponse"].get("cmmMsgHeader", {})
+        raise RuntimeError(f"사전규격 API: {h.get('returnAuthMsg') or h.get('errMsg')}")
+    resp = data.get("response", data)
+    hdr = resp.get("header", {})
+    if str(hdr.get("resultCode", "00")) not in ("00", "0"):
+        raise RuntimeError(f"사전규격 API 오류 {hdr.get('resultCode')}: {hdr.get('resultMsg')}")
+    body = resp.get("body", {})
+    items = body.get("items") or []
+    if isinstance(items, dict):
+        items = items.get("item", [])
+    if isinstance(items, dict):
+        items = [items]
+    return items, int(body.get("totalCount") or 0)
+
+
+def pre_slim(r, kind):
+    """사전규격 한 건을 공고 목록과 같은 모양으로 바꾼다 (점수 계산·화면 재사용)."""
+    g = lambda *ks: next((str(r[k]) for k in ks if r.get(k) not in (None, "")), "")
+    rcpt, close = g("rcptDt", "rgstDt"), g("opninRgstClseDt")
+    no = g("bfSpecRgstNo")
+    return {
+        "bidNtceNo": no, "bidNtceOrd": "000", "bidNtceNm": g("prdctClsfcNoNm", "bsnsNm", "prdctNm"),
+        "bidNtceSttusNm": "", "bidNtceDate": rcpt[:10], "bidNtceBgn": rcpt[11:16],
+        "bsnsDivNm": g("bsnsDivNm") or kind, "cntrctCnclsMthdNm": "", "bidwinrDcsnMthdNm": "",
+        "ntceInsttNm": g("orderInsttNm", "ntceInsttNm"), "dmndInsttNm": g("rlDminsttNm", "dminsttNm"),
+        "bidPrtcptQlfctRgstClseDate": "", "bidPrtcptQlfctRgstClseTm": "",
+        "bidClseDate": close[:10], "bidClseTm": close[11:16], "opengDate": "", "opengTm": "",
+        "asignBdgtAmt": g("asignBdgtAmt"), "presmptPrce": "", "rgnLmtYn": "", "prtcptPsblRgnNm": "",
+        "indstrytyLmtYn": "", "bidprcPsblIndstrytyNm": "",
+        "bidNtceUrl": f"https://www.g2b.go.kr/link/PRCA001_04/single/?bfSpecRegNo={no}" if no else "",
+        "pre": 1, "bidNtceNoList": g("bidNtceNoList"), "ofcl": " ".join(x for x in (g("ofclNm"), g("ofclTelNo")) if x),
+        "specDoc": g("specDocFileUrl1"),
+    }
+
+
+def update_pre(days):
+    """사전규격을 접수일 기준으로 받아 data/pre/YYYYMMDD.json 에 저장. 실패해도 입찰공고 수집은 계속."""
+    key = os.environ.get("NARA_API_KEY")
+    cfg = load_cfg()
+    os.makedirs(PRE, exist_ok=True)
+    try:
+        for d in days:
+            got = {}
+            for op, kind in PRE_OPS.items():
+                begin, end = f"{d:%Y%m%d}0000", f"{d:%Y%m%d}2359"
+                items, total = pre_page(key, op, begin, end, 1)
+                for p in range(2, (total + nb.PAGE_SIZE - 1) // nb.PAGE_SIZE + 1):
+                    items += pre_page(key, op, begin, end, p)[0]
+                for r in items:
+                    row = pre_slim(r, kind)
+                    if row["bidNtceDate"] == d.isoformat():
+                        got[row["bidNtceNo"]] = row
+            rows = sorted(got.values(), key=lambda r: r["bidNtceBgn"])
+            for r in rows:
+                r["score"], r["why"] = nb.score(r, cfg, d)
+            json.dump(rows, open(os.path.join(PRE, f"{d:%Y%m%d}.json"), "w", encoding="utf-8"),
+                      ensure_ascii=False, separators=(",", ":"))
+            print(f"[사전규격 {d}] {len(rows)}건", flush=True)
+        return None
+    except RuntimeError as e:
+        print(e, flush=True)
+        return str(e)
+
+
 def update_site(days_back=3, include_today=True, only_today=False):
     """지난 days_back 일(어제부터)과 오늘 공고를 다시 받아 저장. only_today 면 오늘만."""
     key = os.environ.get("NARA_API_KEY")
@@ -150,6 +247,7 @@ def update_site(days_back=3, include_today=True, only_today=False):
     os.makedirs(DAYS, exist_ok=True)
     today = now_kst().date()
     offsets = [0] if only_today else list(range(days_back, 0, -1)) + ([0] if include_today else [])
+    pre_err = update_pre([today - dt.timedelta(days=i) for i in offsets])
     for i in offsets:
         d = today - dt.timedelta(days=i)
         rows = slim(fetch_day(key, d.strftime("%Y%m%d")), cfg, d.isoformat())
@@ -157,6 +255,7 @@ def update_site(days_back=3, include_today=True, only_today=False):
                   ensure_ascii=False, separators=(",", ":"))
     now = now_kst()
     state = {"today_at": now.strftime("%Y-%m-%dT%H:%M")} if 0 in offsets else {}
+    state["pre_error"] = pre_err
     if not only_today:
         state["daily_on"] = today.isoformat()
     rebuild_index(cfg, state)
@@ -185,7 +284,8 @@ def update_today_new():
     os.makedirs(DAYS, exist_ok=True)
     json.dump(rows, open(path, "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))
     print(f"[{d}] {last} 이후 새 공고 {len(new)}건", flush=True)
-    rebuild_index(cfg, {"new_at": now.strftime("%Y-%m-%dT%H:%M")})
+    pre_err = update_pre([d])               # 사전규격은 하루치가 적어 매번 오늘 전체를 다시 받음
+    rebuild_index(cfg, {"new_at": now.strftime("%Y-%m-%dT%H:%M"), "pre_error": pre_err})
     return bool(new)
 
 
