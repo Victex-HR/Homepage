@@ -489,7 +489,7 @@ function renderPre() {
       <td>${esc(b.ntceInsttNm)}${b.dmndInsttNm && b.dmndInsttNm !== b.ntceInsttNm ? `<br><span style="color:var(--muted);font-size:12.5px">${esc(b.dmndInsttNm)}</span>` : ""}</td>
       <td class="n">${won(b.asignBdgtAmt)}</td>
       <td class="d">${esc((b.bidClseDate || "").slice(5))} ${esc(b.bidClseTm)}</td>
-      <td><a class="out" href="${esc(b.bidNtceUrl)}" target="_blank" rel="noopener">보기 ↗</a></td>
+      <td>${b.bidNtceUrl ? `<a class="out" href="${esc(b.bidNtceUrl)}" target="_blank" rel="noopener" title="규격서 첫 파일 내려받기">규격서 ↓</a>` : ""}</td>
     </tr>`).join("") : `<tr><td colspan="8" class="empty">조건에 맞는 사전규격이 없습니다.</td></tr>`;
 }
 

@@ -197,15 +197,14 @@ def pre_slim(r, kind):
     return {
         "bidNtceNo": no, "bidNtceOrd": "000", "bidNtceNm": g("prdctClsfcNoNm", "bsnsNm", "prdctNm"),
         "bidNtceSttusNm": "", "bidNtceDate": rcpt[:10], "bidNtceBgn": rcpt[11:16],
-        "bsnsDivNm": g("bsnsDivNm") or kind, "cntrctCnclsMthdNm": "", "bidwinrDcsnMthdNm": "",
+        "bsnsDivNm": kind, "preKind": g("bsnsDivNm"),   # 업무구분 필터와 맞추려고 물품/용역/공사/외자로 "cntrctCnclsMthdNm": "", "bidwinrDcsnMthdNm": "",
         "ntceInsttNm": g("orderInsttNm", "ntceInsttNm"), "dmndInsttNm": g("rlDminsttNm", "dminsttNm"),
         "bidPrtcptQlfctRgstClseDate": "", "bidPrtcptQlfctRgstClseTm": "",
         "bidClseDate": close[:10], "bidClseTm": close[11:16], "opengDate": "", "opengTm": "",
         "asignBdgtAmt": g("asignBdgtAmt"), "presmptPrce": "", "rgnLmtYn": "", "prtcptPsblRgnNm": "",
         "indstrytyLmtYn": "", "bidprcPsblIndstrytyNm": "",
-        "bidNtceUrl": f"https://www.g2b.go.kr/link/PRCA001_04/single/?bfSpecRegNo={no}" if no else "",
+        "bidNtceUrl": g("specDocFileUrl1"),   # 규격서 첫 파일 (나라장터 내려받기 주소)
         "pre": 1, "bidNtceNoList": g("bidNtceNoList"), "ofcl": " ".join(x for x in (g("ofclNm"), g("ofclTelNo")) if x),
-        "specDoc": g("specDocFileUrl1"),
     }
 
 
@@ -222,10 +221,9 @@ def update_pre(days):
                 items, total = pre_page(key, op, begin, end, 1)
                 for p in range(2, (total + nb.PAGE_SIZE - 1) // nb.PAGE_SIZE + 1):
                     items += pre_page(key, op, begin, end, p)[0]
-                for r in items:
+                for r in items:     # 조회일(등록 기준)에 묶음. 화면에는 접수일시를 보여 줌
                     row = pre_slim(r, kind)
-                    if row["bidNtceDate"] == d.isoformat():
-                        got[row["bidNtceNo"]] = row
+                    got[row["bidNtceNo"]] = row
             rows = sorted(got.values(), key=lambda r: r["bidNtceBgn"])
             for r in rows:
                 r["score"], r["why"] = nb.score(r, cfg, d)
