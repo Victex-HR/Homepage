@@ -47,6 +47,10 @@ h1 { font-size: 22px; font-weight: 700; margin: 0; letter-spacing: -0.01em; text
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
 .tab { appearance: none; border: 0; background: none; color: var(--muted); font: 600 15px var(--sans); padding: 10px 14px;
   border-bottom: 2px solid transparent; margin-bottom: -1px; cursor: pointer; }
+.tabs { overflow-x: auto; }
+.tab .n { font: 500 12px var(--mono); color: var(--muted); margin-left: 4px; }
+.star { appearance: none; border: 0; background: none; cursor: pointer; font-size: 18px; line-height: 1; color: var(--muted); padding: 2px 4px; }
+.star.on { color: #d4a017; }
 .tab[aria-selected="true"] { color: var(--fg); border-color: var(--accent); }
 .tab:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
@@ -204,8 +208,11 @@ td.t { white-space: nowrap; font-family: var(--mono); font-size: 12.5px; color: 
   <section class="stats" id="stats" aria-label="요약"></section>
 
   <nav class="tabs" role="tablist">
-    <button class="tab" role="tab" id="tab-list" aria-selected="true" aria-controls="p-list">공고 목록</button>
-    <button class="tab" role="tab" id="tab-rec" aria-selected="false" aria-controls="p-rec">추천 공고</button>
+    <button class="tab" role="tab" id="tab-list" data-view="all" aria-selected="true" aria-controls="p-list">공고 목록(전체)</button>
+    <button class="tab" role="tab" id="tab-rec" aria-selected="false" aria-controls="p-rec">추천 공고(전체)</button>
+    <button class="tab" role="tab" id="tab-bid" data-view="bid" aria-selected="false" aria-controls="p-list">입찰공고</button>
+    <button class="tab" role="tab" id="tab-pre" data-view="pre" aria-selected="false" aria-controls="p-list">사전규격공고</button>
+    <button class="tab" role="tab" id="tab-saved" data-view="saved" aria-selected="false" aria-controls="p-list">보관함</button>
   </nav>
 
   <section id="p-list" role="tabpanel" aria-labelledby="tab-list" style="display:grid;gap:12px">
@@ -221,7 +228,7 @@ td.t { white-space: nowrap; font-family: var(--mono); font-size: 12.5px; color: 
     <div class="tablebox">
       <table>
         <thead><tr>
-          <th>추천</th><th>공고일시</th><th>공고명</th><th>구분</th><th>공고기관</th>
+          <th title="보관">★</th><th>추천</th><th>공고일시</th><th>공고명</th><th>구분</th><th>공고기관</th>
           <th style="text-align:right">배정예산</th><th>계약·입찰방식</th><th>입찰·의견 마감</th><th></th>
         </tr></thead>
         <tbody id="tbody"></tbody>
@@ -363,7 +370,7 @@ function setQuick(q) {
 }
 async function loadPeriod() {
   const ds = periodDates();
-  $("#tbody").innerHTML = `<tr><td colspan="9" class="empty">불러오는 중…</td></tr>`;
+  $("#tbody").innerHTML = `<tr><td colspan="10" class="empty">불러오는 중…</td></tr>`;
   await Promise.all([...ds.map(fetchDay), ...ds.map(fetchPre)]);
   ROWS = [];
   const seen = new Map();
@@ -382,7 +389,7 @@ async function loadPeriod() {
   fillFilters();
   const f = $("#from").value, t = $("#to").value;
   $("#avail").textContent = ds.length ? `${f === t ? f : f + " ~ " + t} · 공고가 있는 날 ${ds.length}일` : "선택한 기간에 수집된 공고가 없습니다";
-  shown = PAGE; renderStats(); renderTable(); renderRecs();
+  shown = PAGE; renderStats(); renderTable(); renderRecs(); renderTabs();
 }
 
 /* ---------- 공통 필터 ---------- */
@@ -444,17 +451,49 @@ function loadFilters() {
 
 /* ---------- 요약 ---------- */
 function renderStats() {
-  const recN = ROWS.filter(b => b.score != null).length;
+  const recBid = ROWS.filter(b => !b.pre && b.score != null).length, recPre = ROWS.filter(b => b.pre && b.score != null).length;
   const hot = RECS.filter(b => b.open && dleft(b.bidClseDate) <= 3).length;
   $("#stats").innerHTML = [
     [ROWS.length.toLocaleString(), "기간 내 공고", ""],
-    [recN.toLocaleString(), "추천 기준 통과", "rec"],
+    [recBid.toLocaleString(), "추천 기준 통과 (입찰)", "rec"],
+    [recPre.toLocaleString(), "추천 기준 통과 (사전규격)", "rec"],
     [hot, "3일 안에 마감되는 추천", "hot"],
-    [META.totalStored.toLocaleString(), `보관 중 (${META.days.length}일)`, ""],
+    [Object.keys(SAVED).length.toLocaleString(), "보관 중 (내가 보관한 공고)", ""],
   ].map(([v, l, c]) => `<div class="stat ${c && "is-" + c}"><b>${v}</b><span>${l}</span></div>`).join("");
   const by = {}; ROWS.forEach(b => { const k = b.bsnsDivNm || "기타"; by[k] = (by[k] || 0) + 1; });
   $("#typesum").innerHTML = Object.entries(by).sort((a, b) => b[1] - a[1]).map(([k, v]) =>
     `<span><i class="sw" style="background:${TYPE_COLOR[k] || "var(--muted)"}"></i>${esc(k)} <b>${v.toLocaleString()}</b></span>`).join("");
+}
+
+/* ---------- 보관함 (이 브라우저에 저장) ---------- */
+const keyOf = b => (b.pre ? "P:" : "B:") + b.bidNtceNo + "-" + b.bidNtceOrd;
+let SAVED = {};
+try { SAVED = JSON.parse(localStorage.getItem("naraSaved") || "{}"); } catch (e) {}
+const isSaved = b => !!SAVED[keyOf(b)];
+function toggleSave(b) {
+  const k = keyOf(b);
+  if (SAVED[k]) delete SAVED[k];
+  else { const { why, groups, score, open, ...rest } = b; SAVED[k] = { ...rest, savedAt: new Date().toISOString() }; }
+  try { localStorage.setItem("naraSaved", JSON.stringify(SAVED)); } catch (e) { toast("이 브라우저에서는 보관을 저장할 수 없습니다."); }
+  renderStats(); renderTabs();
+}
+const starBtn = b => `<button class="star ${isSaved(b) ? "on" : ""}" type="button" data-k="${esc(keyOf(b))}" title="${isSaved(b) ? "보관 해제" : "보관"}" aria-label="보관">${isSaved(b) ? "★" : "☆"}</button>`;
+function savedRows() {   // 보관한 공고는 기간과 상관없이 보여 주고, 점수는 지금 기준으로 다시 매김
+  return Object.values(SAVED).map(b => { const r = score(b, CRIT, new Date(b.bidNtceDate + "T00:00:00")); return { ...b, score: r ? r.score : null, why: r ? r.why : [], groups: r ? r.groups : [] }; });
+}
+let VIEW = "all";
+const viewRows = () => VIEW === "saved" ? savedRows() : VIEW === "bid" ? ROWS.filter(b => !b.pre) : VIEW === "pre" ? ROWS.filter(b => b.pre) : ROWS;
+function renderTabs() {
+  const n = { list: ROWS.length, rec: RECS.length, bid: ROWS.filter(b => !b.pre).length, pre: ROWS.filter(b => b.pre).length, saved: Object.keys(SAVED).length };
+  for (const [id, v] of Object.entries(n)) {
+    const t = $("#tab-" + id); t.querySelector(".n")?.remove(); t.insertAdjacentHTML("beforeend", `<span class="n">${v.toLocaleString()}</span>`);
+  }
+}
+function onStar(e) {
+  const btn = e.target.closest(".star"); if (!btn) return false;
+  const k = btn.dataset.k, b = [...ROWS, ...RECS].find(x => keyOf(x) === k) || SAVED[k];
+  if (b) { toggleSave(b); if (VIEW === "saved") renderTable(); else { btn.classList.toggle("on", isSaved(b)); btn.textContent = isSaved(b) ? "★" : "☆"; } }
+  return true;
 }
 
 /* ---------- 공고 목록 ---------- */
@@ -467,11 +506,13 @@ const SORTS = {
 };
 function renderTable() {
   const q = $("#dq").value.trim().toLowerCase();
-  LIST = ROWS.filter(b => match(b, q) && passes(b));
+  const base = viewRows();
+  LIST = base.filter(b => match(b, q) && passes(b));
   LIST.sort(SORTS[$("#dsort").value]);
-  $("#dcount").textContent = `${LIST.length.toLocaleString()} / ${ROWS.length.toLocaleString()}건`;
+  $("#dcount").textContent = `${LIST.length.toLocaleString()} / ${base.length.toLocaleString()}건`;
   $("#tbody").innerHTML = LIST.length ? LIST.slice(0, shown).map((b, i) => `
     <tr class="row ${b.score == null ? "dim" : ""}" data-i="${i}">
+      <td>${starBtn(b)}</td>
       <td>${b.score != null ? `<span class="sc">${b.score}</span>` : ""}</td>
       <td class="t">${esc((b.bidNtceDate || "").slice(5))} ${esc(b.bidNtceBgn)}</td>
       <td>${esc(b.bidNtceNm)}${b.bidNtceSttusNm && b.bidNtceSttusNm !== "일반공고" ? ` <span class="chip">${esc(b.bidNtceSttusNm)}</span>` : ""}</td>
@@ -482,12 +523,13 @@ function renderTable() {
       <td class="d">${esc((b.bidClseDate || "").slice(5))} ${esc(b.bidClseTm)}</td>
       <td>${b.pre ? (b.bidNtceUrl ? `<a class="out" href="${esc(b.bidNtceUrl)}" target="_blank" rel="noopener" title="규격서 첫 파일 내려받기">규격서 ↓</a>` : "")
         : `<a class="out" href="${esc(b.bidNtceUrl)}" target="_blank" rel="noopener">공고 ↗</a>`}</td>
-    </tr>`).join("") : `<tr><td colspan="9" class="empty">조건에 맞는 공고가 없습니다.</td></tr>`;
+    </tr>`).join("") : `<tr><td colspan="10" class="empty">${VIEW === "saved" && !Object.keys(SAVED).length ? "보관한 공고가 없습니다. 목록에서 ☆를 눌러 보관하세요." : "조건에 맞는 공고가 없습니다."}</td></tr>`;
   const rest = LIST.length - shown;
   $("#more").hidden = rest <= 0;
   $("#more").innerHTML = rest > 0 ? `${shown.toLocaleString()}건까지 표시했습니다. <button class="btn" type="button" id="moreBtn">${Math.min(rest, PAGE)}건 더 보기</button> 전체는 엑셀로 받을 수 있습니다.` : "";
 }
 function onRowClick(e) {
+  if (onStar(e)) return;
   const tr = e.target.closest("tr.row"); if (!tr || e.target.closest("a")) return;
   const open = tr.nextElementSibling?.classList.contains("detail");
   $$("tr.detail").forEach(x => x.remove()); $$("tr.row.on").forEach(x => x.classList.remove("on"));
@@ -501,7 +543,7 @@ function onRowClick(e) {
     ["개찰", `${b.opengDate} ${b.opengTm}`], ["지역제한", b.rgnLmtYn === "Y" ? (b.prtcptPsblRgnNm || "있음") : "없음"],
     ["업종제한", b.indstrytyLmtYn === "Y" ? (b.bidprcPsblIndstrytyNm || "있음") : "없음"],
     ["판정", (b.why || []).map(w => (w.g ? w.g + ": " : "") + w.t).join(" / ") || "기준에 맞는 키워드 없음"]];
-  tr.insertAdjacentHTML("afterend", `<tr class="detail"><td colspan="9"><dl class="dl">${f.map(([k, v]) =>
+  tr.insertAdjacentHTML("afterend", `<tr class="detail"><td colspan="10"><dl class="dl">${f.map(([k, v]) =>
     `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl></td></tr>`);
 }
 
@@ -516,7 +558,7 @@ function renderRecs() {
   $("#recs").innerHTML = list.length ? list.slice(0, 300).map(b => `
     <article class="rec">
       <div class="score">${b.score}</div>
-      <h3>${b.pre ? `<span class="chip pre">사전규격</span> ` : ""}<a href="${esc(b.bidNtceUrl)}" target="_blank" rel="noopener">${esc(b.bidNtceNm)}</a></h3>
+      <h3>${starBtn(b)}${b.pre ? `<span class="chip pre">사전규격</span> ` : ""}<a href="${esc(b.bidNtceUrl)}" target="_blank" rel="noopener">${esc(b.bidNtceNm)}</a></h3>
       ${ddayHtml(b)}
       <div class="meta">
         <span class="chip t" style="color:${TYPE_COLOR[b.bsnsDivNm] || "var(--muted)"}">${esc(b.bsnsDivNm)}</span>
@@ -660,7 +702,10 @@ async function refresh() {
 
 /* ---------- 시작 ---------- */
 function setTab(name) {
-  for (const id of ["list", "rec"]) { $("#tab-" + id).setAttribute("aria-selected", id === name); $("#p-" + id).hidden = id !== name; }
+  for (const id of ["list", "rec", "bid", "pre", "saved"]) $("#tab-" + id).setAttribute("aria-selected", id === name);
+  $("#p-rec").hidden = name !== "rec"; $("#p-list").hidden = name === "rec";
+  if (name !== "rec") { VIEW = $("#tab-" + name).dataset.view; shown = PAGE; $$("tr.detail").forEach(x => x.remove()); renderTable(); }
+  $("#avail").style.opacity = name === "saved" ? .4 : 1;
 }
 async function init() {
   try { await loadMeta(); }
@@ -694,7 +739,8 @@ async function init() {
   }));
   $("#tbody").addEventListener("click", onRowClick);
   $("#more").addEventListener("click", e => { if (e.target.id === "moreBtn") { shown += PAGE; renderTable(); } });
-  ["list", "rec"].forEach(n => $("#tab-" + n).onclick = () => setTab(n));
+  ["list", "rec", "bid", "pre", "saved"].forEach(n => $("#tab-" + n).onclick = () => setTab(n));
+  $("#recs").addEventListener("click", e => { if (onStar(e)) e.preventDefault(); });
   $("#refresh").onclick = refresh;
   $("#excel").onclick = downloadExcel;
   await loadPeriod();
