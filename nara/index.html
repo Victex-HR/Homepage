@@ -156,6 +156,7 @@ footer { color: var(--muted); font-size: 12.5px; }
 .budget { display: inline-flex; gap: 6px; align-items: center; font-size: 14px; color: var(--muted); }
 .budget input { width: 110px; font-family: var(--mono); }
 .filters select.on, .budget input.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.chip.pre { background: var(--accent-soft); color: var(--accent); border-color: transparent; font-weight: 600; }
 td.m { font-size: 12.5px; color: var(--muted); white-space: nowrap; }
 td.t { white-space: nowrap; font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
 </style>
@@ -191,6 +192,7 @@ td.t { white-space: nowrap; font-family: var(--mono); font-size: 12.5px; color: 
 
   <section class="period filters" aria-label="필터">
     <span class="lbl">필터</span>
+    <details class="ms" id="fKind" data-label="공고종류"><summary></summary><div class="menu"></div></details>
     <details class="ms" id="fRec" data-label="추천 기준"><summary></summary><div class="menu"></div></details>
     <details class="ms" id="fType" data-label="업무구분"><summary></summary><div class="menu"></div></details>
     <details class="ms" id="fCntr" data-label="계약방법"><summary></summary><div class="menu"></div></details>
@@ -204,7 +206,6 @@ td.t { white-space: nowrap; font-family: var(--mono); font-size: 12.5px; color: 
   <nav class="tabs" role="tablist">
     <button class="tab" role="tab" id="tab-list" aria-selected="true" aria-controls="p-list">공고 목록</button>
     <button class="tab" role="tab" id="tab-rec" aria-selected="false" aria-controls="p-rec">추천 공고</button>
-    <button class="tab" role="tab" id="tab-pre" aria-selected="false" aria-controls="p-pre">사전규격</button>
   </nav>
 
   <section id="p-list" role="tabpanel" aria-labelledby="tab-list" style="display:grid;gap:12px">
@@ -221,7 +222,7 @@ td.t { white-space: nowrap; font-family: var(--mono); font-size: 12.5px; color: 
       <table>
         <thead><tr>
           <th>추천</th><th>공고일시</th><th>공고명</th><th>구분</th><th>공고기관</th>
-          <th style="text-align:right">배정예산</th><th>계약·입찰방식</th><th>입찰마감</th><th></th>
+          <th style="text-align:right">배정예산</th><th>계약·입찰방식</th><th>입찰·의견 마감</th><th></th>
         </tr></thead>
         <tbody id="tbody"></tbody>
       </table>
@@ -239,23 +240,6 @@ td.t { white-space: nowrap; font-family: var(--mono); font-size: 12.5px; color: 
     <div class="recs" id="recs"></div>
   </section>
 
-  <section id="p-pre" role="tabpanel" aria-labelledby="tab-pre" hidden style="display:grid;gap:12px">
-    <div class="toolbar">
-      <input type="search" id="pq" placeholder="사업명, 기관, 등록번호 검색">
-      <label><input type="checkbox" id="popen"> 의견 마감 전만</label>
-      <span class="count" id="pcount"></span>
-    </div>
-    <div class="empty" id="pnote" hidden></div>
-    <div class="tablebox">
-      <table>
-        <thead><tr>
-          <th>추천</th><th>접수일시</th><th>사업명(품명)</th><th>구분</th><th>발주기관</th>
-          <th style="text-align:right">배정예산</th><th>의견 마감</th><th></th>
-        </tr></thead>
-        <tbody id="pbody"></tbody>
-      </table>
-    </div>
-  </section>
 
   <footer id="foot">데이터: 조달청 나라장터 공공데이터개방표준서비스 (입찰공고정보)</footer>
 </div>
@@ -347,6 +331,17 @@ function fillSelect(sel, values) {
 
 /* ---------- 데이터 ---------- */
 const dates = () => META.days.filter(d => d.total > 0).map(d => d.date);   // 공고가 있는 날, 최신순
+let PREDATA = {};
+async function fetchPre(date) {
+  if (!PREDATA[date]) {
+    PREDATA[date] = [];
+    if ((META.pre_days || []).some(d => d.date === date && d.total > 0)) {
+      try { PREDATA[date] = (await (await fetch(`${DATA_BASE}pre/${date.replaceAll("-", "")}.json${bust}`, { cache: "no-cache" })).json()).map(b => ({ ...b, pre: 1 })); }
+      catch (e) {}
+    }
+  }
+  return PREDATA[date];
+}
 async function fetchDay(date) {
   if (!DAYDATA[date]) {
     try { DAYDATA[date] = await (await fetch(`${DATA_BASE}days/${date.replaceAll("-", "")}.json${bust}`, { cache: "no-cache" })).json(); }
@@ -369,16 +364,17 @@ function setQuick(q) {
 async function loadPeriod() {
   const ds = periodDates();
   $("#tbody").innerHTML = `<tr><td colspan="9" class="empty">불러오는 중…</td></tr>`;
-  await Promise.all(ds.map(fetchDay));
+  await Promise.all([...ds.map(fetchDay), ...ds.map(fetchPre)]);
   ROWS = [];
   const seen = new Map();
-  for (const d of ds) for (const b of DAYDATA[d] || []) {
+  for (const d of ds) for (const b of [...(DAYDATA[d] || []), ...(PREDATA[d] || [])]) {
     const r = score(b, CRIT, new Date(d + "T00:00:00"));
     const row = { ...b, score: r ? r.score : null, why: r ? r.why : [], groups: r ? r.groups : [] };
     ROWS.push(row);
     if (r) {   // 추천 탭: 같은 공고의 최신 차수만, 오늘 기준으로 다시 판정
       const now = score(b, CRIT, today), prev = seen.get(b.bidNtceNo);
       const keep = { ...row, open: !!now, ...(now || {}) };
+      if (b.pre) keep.open = (dleft(b.bidClseDate) ?? 0) >= 0;   // 사전규격은 의견 마감 전까지
       if (!prev || b.bidNtceOrd > prev.bidNtceOrd) seen.set(b.bidNtceNo, keep);
     }
   }
@@ -387,22 +383,26 @@ async function loadPeriod() {
   const f = $("#from").value, t = $("#to").value;
   $("#avail").textContent = ds.length ? `${f === t ? f : f + " ~ " + t} · 공고가 있는 날 ${ds.length}일` : "선택한 기간에 수집된 공고가 없습니다";
   shown = PAGE; renderStats(); renderTable(); renderRecs();
-  loadPre();
 }
 
 /* ---------- 공통 필터 ---------- */
 // 각 필터는 여러 값을 고를 수 있다. 한 필터 안에서는 하나라도 맞으면, 필터끼리는 모두 맞아야 통과.
-const MS = ["fRec", "fType", "fCntr", "fBid"];
+const MS = ["fKind", "fRec", "fType", "fCntr", "fBid"];
+const kindOf = b => b.pre ? "사전규격" : "입찰공고";
 const SEL = Object.fromEntries(MS.map(k => [k, new Set()]));
 const MSKEY = { fType: "bsnsDivNm", fCntr: "cntrctCnclsMthdNm", fBid: "bidwinrDcsnMthdNm" };
-const counts = key => { const c = {}; ROWS.forEach(b => { const v = b[key] || "기타"; c[v] = (c[v] || 0) + 1; }); return c; };
+const counts = (key, bidsOnly) => { const c = {}; ROWS.forEach(b => { if (bidsOnly && b.pre) return; const v = b[key] || "기타"; c[v] = (c[v] || 0) + 1; }); return c; };
 function msOptions(k) {
   if (k === "fRec") {
     const g = [...(CRIT.keyword_groups || []).map(g => g.name), ...((CRIT.agencies || []).length ? ["발주처"] : [])];
     const n = v => ROWS.filter(b => v === "rec" ? b.score != null : (b.groups || []).includes(v)).length;
     return [["rec", "추천 공고 전체", n("rec")], ...g.map(x => [x, "추천 그룹: " + x, n(x)])];
   }
-  const c = counts(MSKEY[k]);
+  if (k === "fKind") {
+    const c = { 입찰공고: 0, 사전규격: 0 }; ROWS.forEach(b => c[kindOf(b)]++);
+    return Object.keys(c).map(v => [v, v, c[v]]);
+  }
+  const c = counts(MSKEY[k], k === "fCntr" || k === "fBid");
   for (const v of SEL[k]) if (!(v in c)) c[v] = 0;   // 고른 값은 이 기간에 없어도 남겨 둠
   return Object.keys(c).sort((a, b) => c[b] - c[a]).map(v => [v, v, c[v]]);
 }
@@ -428,7 +428,8 @@ function markFilters() {
 function passes(b) {
   const r = SEL.fRec, min = (+$("#fBudget").value || 0) * 1e4;
   if (r.size && !((r.has("rec") && b.score != null) || (b.groups || []).some(g => r.has(g)))) return false;
-  for (const k in MSKEY) if (SEL[k].size && !(b.pre && k !== "fType") && !SEL[k].has(b[MSKEY[k]] || "기타")) return false;
+  if (SEL.fKind.size && !SEL.fKind.has(kindOf(b))) return false;
+  for (const k in MSKEY) if (SEL[k].size && !SEL[k].has(b[MSKEY[k]] || "기타")) return false;   // 사전규격은 계약·입찰방식이 없어 해당 필터를 쓰면 빠짐
   if (min && (toInt(b.asignBdgtAmt) || toInt(b.presmptPrce)) < min) return false;
   return true;
 }
@@ -456,43 +457,6 @@ function renderStats() {
     `<span><i class="sw" style="background:${TYPE_COLOR[k] || "var(--muted)"}"></i>${esc(k)} <b>${v.toLocaleString()}</b></span>`).join("");
 }
 
-/* ---------- 사전규격 ---------- */
-let PRE = [], PLIST = [], PREDATA = {};
-const preDates = () => (META.pre_days || []).filter(d => d.total > 0).map(d => d.date);
-async function loadPre() {
-  const f = $("#from").value, t = $("#to").value;
-  const ds = preDates().filter(d => (!f || d >= f) && (!t || d <= t));
-  await Promise.all(ds.map(async d => {
-    if (!PREDATA[d]) {
-      try { PREDATA[d] = await (await fetch(`${DATA_BASE}pre/${d.replaceAll("-", "")}.json${bust}`, { cache: "no-cache" })).json(); }
-      catch (e) { PREDATA[d] = []; }
-    }
-  }));
-  PRE = ds.flatMap(d => PREDATA[d] || []).map(b => { const r = score(b, CRIT, new Date(b.bidNtceDate + "T00:00:00")); return { ...b, score: r ? r.score : null, why: r ? r.why : [], groups: r ? r.groups : [] }; });
-  $("#tab-pre").textContent = PRE.length ? `사전규격 ${PRE.length.toLocaleString()}` : "사전규격";
-  renderPre();
-}
-function renderPre() {
-  const q = $("#pq").value.trim().toLowerCase(), open = $("#popen").checked;
-  PLIST = PRE.filter(b => (!q || [b.bidNtceNm, b.ntceInsttNm, b.dmndInsttNm, b.bidNtceNo].join(" ").toLowerCase().includes(q))
-    && passes(b) && (!open || (dleft(b.bidClseDate) ?? 0) >= 0)).sort(SORTS.new);
-  $("#pcount").textContent = `${PLIST.length.toLocaleString()} / ${PRE.length.toLocaleString()}건`;
-  const err = META.pre_error, none = !(META.pre_days || []).length;
-  $("#pnote").hidden = !(err || none);
-  $("#pnote").textContent = err ? `사전규격을 받지 못했습니다: ${err}` : none ? "아직 수집된 사전규격이 없습니다. 다음 자동 수집 뒤에 나타납니다." : "";
-  $("#pbody").innerHTML = PLIST.length ? PLIST.slice(0, 500).map(b => `
-    <tr class="${b.score == null ? "dim" : ""}" title="${esc((b.why || []).map(w => (w.g ? w.g + ": " : "") + w.t).join(", "))}">
-      <td>${b.score != null ? `<span class="sc">${b.score}</span>` : ""}</td>
-      <td class="t">${esc((b.bidNtceDate || "").slice(5))} ${esc(b.bidNtceBgn)}</td>
-      <td>${esc(b.bidNtceNm)}${b.bidNtceNoList ? ` <span class="chip">입찰공고 ${esc(b.bidNtceNoList)}</span>` : ""}</td>
-      <td style="white-space:nowrap">${esc(b.bsnsDivNm)}</td>
-      <td>${esc(b.ntceInsttNm)}${b.dmndInsttNm && b.dmndInsttNm !== b.ntceInsttNm ? `<br><span style="color:var(--muted);font-size:12.5px">${esc(b.dmndInsttNm)}</span>` : ""}</td>
-      <td class="n">${won(b.asignBdgtAmt)}</td>
-      <td class="d">${esc((b.bidClseDate || "").slice(5))} ${esc(b.bidClseTm)}</td>
-      <td>${b.bidNtceUrl ? `<a class="out" href="${esc(b.bidNtceUrl)}" target="_blank" rel="noopener" title="규격서 첫 파일 내려받기">규격서 ↓</a>` : ""}</td>
-    </tr>`).join("") : `<tr><td colspan="8" class="empty">조건에 맞는 사전규격이 없습니다.</td></tr>`;
-}
-
 /* ---------- 공고 목록 ---------- */
 const stamp = b => (b.bidNtceDate || "") + " " + (b.bidNtceBgn || "");
 const SORTS = {
@@ -511,12 +475,13 @@ function renderTable() {
       <td>${b.score != null ? `<span class="sc">${b.score}</span>` : ""}</td>
       <td class="t">${esc((b.bidNtceDate || "").slice(5))} ${esc(b.bidNtceBgn)}</td>
       <td>${esc(b.bidNtceNm)}${b.bidNtceSttusNm && b.bidNtceSttusNm !== "일반공고" ? ` <span class="chip">${esc(b.bidNtceSttusNm)}</span>` : ""}</td>
-      <td style="white-space:nowrap">${esc(b.bsnsDivNm)}</td>
+      <td style="white-space:nowrap">${b.pre ? `<span class="chip pre">사전규격</span><br>` : ""}${esc(b.bsnsDivNm)}</td>
       <td>${esc(b.ntceInsttNm)}</td>
       <td class="n">${won(b.asignBdgtAmt)}</td>
-      <td class="m">${esc(b.cntrctCnclsMthdNm)}<br>${esc(b.bidwinrDcsnMthdNm)}</td>
+      <td class="m">${b.pre ? "의견 등록 마감" : `${esc(b.cntrctCnclsMthdNm)}<br>${esc(b.bidwinrDcsnMthdNm)}`}</td>
       <td class="d">${esc((b.bidClseDate || "").slice(5))} ${esc(b.bidClseTm)}</td>
-      <td><a class="out" href="${esc(b.bidNtceUrl)}" target="_blank" rel="noopener">공고 ↗</a></td>
+      <td>${b.pre ? (b.bidNtceUrl ? `<a class="out" href="${esc(b.bidNtceUrl)}" target="_blank" rel="noopener" title="규격서 첫 파일 내려받기">규격서 ↓</a>` : "")
+        : `<a class="out" href="${esc(b.bidNtceUrl)}" target="_blank" rel="noopener">공고 ↗</a>`}</td>
     </tr>`).join("") : `<tr><td colspan="9" class="empty">조건에 맞는 공고가 없습니다.</td></tr>`;
   const rest = LIST.length - shown;
   $("#more").hidden = rest <= 0;
@@ -528,7 +493,10 @@ function onRowClick(e) {
   $$("tr.detail").forEach(x => x.remove()); $$("tr.row.on").forEach(x => x.classList.remove("on"));
   if (open) return;
   const b = LIST[+tr.dataset.i]; tr.classList.add("on");
-  const f = [["공고번호", `${b.bidNtceNo}-${b.bidNtceOrd}`], ["수요기관", b.dmndInsttNm], ["계약방법", b.cntrctCnclsMthdNm],
+  const f = b.pre ? [["사전규격 등록번호", b.bidNtceNo], ["수요기관", b.dmndInsttNm], ["나라장터 구분", b.preKind],
+    ["의견 등록 마감", `${b.bidClseDate} ${b.bidClseTm}`], ["담당자", b.ofcl], ["연결된 입찰공고", b.bidNtceNoList || "아직 없음"],
+    ["판정", (b.why || []).map(w => (w.g ? w.g + ": " : "") + w.t).join(" / ") || "기준에 맞는 키워드 없음"]]
+  : [["공고번호", `${b.bidNtceNo}-${b.bidNtceOrd}`], ["수요기관", b.dmndInsttNm], ["계약방법", b.cntrctCnclsMthdNm],
     ["낙찰방법", b.bidwinrDcsnMthdNm], ["추정가격", won(b.presmptPrce)], ["참가등록마감", `${b.bidPrtcptQlfctRgstClseDate} ${b.bidPrtcptQlfctRgstClseTm}`],
     ["개찰", `${b.opengDate} ${b.opengTm}`], ["지역제한", b.rgnLmtYn === "Y" ? (b.prtcptPsblRgnNm || "있음") : "없음"],
     ["업종제한", b.indstrytyLmtYn === "Y" ? (b.bidprcPsblIndstrytyNm || "있음") : "없음"],
@@ -548,14 +516,14 @@ function renderRecs() {
   $("#recs").innerHTML = list.length ? list.slice(0, 300).map(b => `
     <article class="rec">
       <div class="score">${b.score}</div>
-      <h3><a href="${esc(b.bidNtceUrl)}" target="_blank" rel="noopener">${esc(b.bidNtceNm)}</a></h3>
+      <h3>${b.pre ? `<span class="chip pre">사전규격</span> ` : ""}<a href="${esc(b.bidNtceUrl)}" target="_blank" rel="noopener">${esc(b.bidNtceNm)}</a></h3>
       ${ddayHtml(b)}
       <div class="meta">
         <span class="chip t" style="color:${TYPE_COLOR[b.bsnsDivNm] || "var(--muted)"}">${esc(b.bsnsDivNm)}</span>
         <span>${esc(b.ntceInsttNm)}${b.dmndInsttNm && b.dmndInsttNm !== b.ntceInsttNm ? " → " + esc(b.dmndInsttNm) : ""}</span>
         <span>배정예산 <span class="num">${won(b.asignBdgtAmt)}</span></span>
-        <span>${esc(b.cntrctCnclsMthdNm)} · ${esc(b.bidwinrDcsnMthdNm)}</span>
-        <span>마감 <span class="num">${esc(b.bidClseDate)} ${esc(b.bidClseTm)}</span></span>
+        ${b.pre ? "" : `<span>${esc(b.cntrctCnclsMthdNm)} · ${esc(b.bidwinrDcsnMthdNm)}</span>`}
+        <span>${b.pre ? "의견 마감" : "마감"} <span class="num">${esc(b.bidClseDate)} ${esc(b.bidClseTm)}</span></span>
         <span>공고 <span class="num">${esc(b.bidNtceDate)} ${esc(b.bidNtceBgn)}</span></span>
       </div>
       <div class="why">${whyChips(b.why)}</div>
@@ -587,7 +555,7 @@ function zip(files) {   // 압축 없는(store) zip
 const xe = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])).replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "");
 const colName = i => { let s = ""; for (i++; i; i = Math.floor((i - 1) / 26)) s = String.fromCharCode(65 + (i - 1) % 26) + s; return s; };
 const XCOLS = [
-  ["추천점수", 8, b => b.score ?? "", 1], ["공고일", 11, b => b.bidNtceDate], ["공고시각", 8, b => b.bidNtceBgn], ["공고명", 60, b => b.bidNtceNm],
+  ["추천점수", 8, b => b.score ?? "", 1], ["공고종류", 9, b => b.pre ? "사전규격" : "입찰공고"], ["공고일", 11, b => b.bidNtceDate], ["공고시각", 8, b => b.bidNtceBgn], ["공고명", 60, b => b.bidNtceNm],
   ["공고상태", 10, b => b.bidNtceSttusNm], ["업무구분", 8, b => b.bsnsDivNm], ["공고기관", 26, b => b.ntceInsttNm], ["수요기관", 26, b => b.dmndInsttNm],
   ["배정예산(원)", 14, b => toInt(b.asignBdgtAmt) || "", 2], ["추정가격(원)", 14, b => toInt(b.presmptPrce) || "", 2],
   ["참가등록마감", 17, b => `${b.bidPrtcptQlfctRgstClseDate || ""} ${b.bidPrtcptQlfctRgstClseTm || ""}`.trim()],
@@ -627,13 +595,13 @@ function makeXlsx(sheets) {
   return zip(files);
 }
 function downloadExcel() {
-  const recTab = !$("#p-rec").hidden, preTab = !$("#p-pre").hidden;
-  const sheets = preTab ? [{ name: "사전규격", rows: PLIST }] : recTab ? [{ name: "추천 공고", rows: recList() }]
+  const recTab = !$("#p-rec").hidden;
+  const sheets = recTab ? [{ name: "추천 공고", rows: recList() }]
     : [{ name: "공고 목록", rows: LIST }, { name: "추천만", rows: LIST.filter(b => b.score != null).sort(SORTS.score) }];
   const f = $("#from").value.replaceAll("-", ""), t = $("#to").value.replaceAll("-", "");
   const a = document.createElement("a");
   a.href = URL.createObjectURL(makeXlsx(sheets));
-  a.download = `NARA_${preTab ? "prespec" : recTab ? "recommended" : "bids"}_${f === t ? f : f + "-" + t}.xlsx`;
+  a.download = `NARA_${recTab ? "recommended" : "bids"}_${f === t ? f : f + "-" + t}.xlsx`;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   toast(`${sheets[0].rows.length.toLocaleString()}건을 엑셀로 받았습니다. 지금 보이는 검색·필터 조건이 그대로 적용됩니다.`);
@@ -648,7 +616,7 @@ async function loadMeta() {
   const ds = dates();
   ["#from", "#to"].forEach(s => { $(s).min = ds[ds.length - 1] || ""; $(s).max = ds[0] || ""; });
   const kw = (CRIT.keyword_groups || []).map(g => g.name).join(", ");
-  $("#foot").textContent = `데이터: 조달청 나라장터 공공데이터개방표준서비스 (입찰공고정보) · 추천 기준: ${kw}${(CRIT.agencies || []).length ? ", 발주처 " + CRIT.agencies.length + "곳" : ""}`;
+  $("#foot").textContent = `데이터: 조달청 나라장터 공공데이터개방표준서비스 (입찰공고정보), 사전규격정보서비스 · 추천 기준: ${kw}${(CRIT.agencies || []).length ? ", 발주처 " + CRIT.agencies.length + "곳" : ""}`;
 }
 // 갱신: 저장된 수집 결과를 다시 읽고, 실시간 조회 함수가 있으면 지금 시각까지 나라장터에서 바로 받아 합친다.
 async function liveFetch() {
@@ -692,7 +660,7 @@ async function refresh() {
 
 /* ---------- 시작 ---------- */
 function setTab(name) {
-  for (const id of ["list", "rec", "pre"]) { $("#tab-" + id).setAttribute("aria-selected", id === name); $("#p-" + id).hidden = id !== name; }
+  for (const id of ["list", "rec"]) { $("#tab-" + id).setAttribute("aria-selected", id === name); $("#p-" + id).hidden = id !== name; }
 }
 async function init() {
   try { await loadMeta(); }
@@ -704,8 +672,7 @@ async function init() {
   setQuick("1");
   ["#dq", "#dsort"].forEach(s => $(s).addEventListener("input", () => { shown = PAGE; renderTable(); }));
   ["#rq", "#ropen", "#rsoon"].forEach(s => $(s).addEventListener("input", renderRecs));
-  ["#pq", "#popen"].forEach(s => $(s).addEventListener("input", renderPre));
-  const onFilter = () => { markFilters(); shown = PAGE; renderTable(); renderRecs(); renderPre(); saveFilters(); };
+  const onFilter = () => { markFilters(); shown = PAGE; renderTable(); renderRecs(); saveFilters(); };
   for (const k of MS) {
     const el = $("#" + k);
     el.addEventListener("change", e => { const v = e.target.value; e.target.checked ? SEL[k].add(v) : SEL[k].delete(v); onFilter(); });
@@ -727,7 +694,7 @@ async function init() {
   }));
   $("#tbody").addEventListener("click", onRowClick);
   $("#more").addEventListener("click", e => { if (e.target.id === "moreBtn") { shown += PAGE; renderTable(); } });
-  ["list", "rec", "pre"].forEach(n => $("#tab-" + n).onclick = () => setTab(n));
+  ["list", "rec"].forEach(n => $("#tab-" + n).onclick = () => setTab(n));
   $("#refresh").onclick = refresh;
   $("#excel").onclick = downloadExcel;
   await loadPeriod();
