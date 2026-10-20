@@ -24,12 +24,28 @@
 	h2 { font-size: 16px; margin: 40px 0 12px; }
 	ul { margin: 0; padding-left: 20px; color: var(--muted); font-size: 14px; }
 	code { font-size: 13px; }
+	a.banner { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+		margin: 0 0 32px; padding: 20px 24px; border-radius: 12px; background: #014099; color: #fff;
+		text-decoration: none; transition: filter .2s; }
+	a.banner:hover, a.banner:focus-visible { filter: brightness(1.12); }
+	a.banner strong { display: block; font-size: 18px; margin-bottom: 2px; }
+	a.banner span { font-size: 14px; opacity: .85; }
+	a.banner em { font-style: normal; font-weight: 600; font-size: 14px; white-space: nowrap;
+		padding: 8px 14px; border: 1px solid rgba(255,255,255,.6); border-radius: 999px; }
 </style>
 </head>
 <body>
 <main>
 	<h1>VICTEX 홈페이지 리뉴얼</h1>
 	<p class="lead">현행 사이트 복제본과 리뉴얼 시안별 작업본을 비교해 보는 화면입니다.</p>
+
+	<a class="banner" href="https://82-hy-jun.github.io/victex/nara/">
+		<div>
+			<strong>나라장터 입찰공고 추천</strong>
+			<span>매일 갱신되는 입찰공고와 사전규격을 회사 기준으로 골라 보여 줍니다.</span>
+		</div>
+		<em>바로가기 →</em>
+	</a>
 
 	<div class="grid">
 		<a class="card" href="original/index.html">
@@ -55,10 +71,6 @@
 		<a class="card" href="Renewal_5/index.html">
 			<strong>Renewal_5</strong>
 			<span>5안 · 3부문 사업모음 (첨부 구성 · 카드 사진 교체 · 카드별 아이콘)</span>
-		</a>
-		<a class="card" href="https://82-hy-jun.github.io/victex/nara/">
-			<strong>나라장터 입찰공고</strong>
-			<span>매일 갱신되는 입찰공고 · 사전규격 추천 화면</span>
 		</a>
 	</div>
 
