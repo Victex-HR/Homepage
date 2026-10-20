@@ -459,7 +459,8 @@ function loadFilters() {
 
 /* ---------- 요약 ---------- */
 function renderStats() {
-  const recBid = ROWS.filter(b => !b.pre && b.score != null).length, recPre = ROWS.filter(b => b.pre && b.score != null).length;
+  // 추천 공고 탭과 같은 기준: 같은 공고의 정정 차수는 최신 하나만 센다
+  const recBid = RECS.filter(b => !b.pre).length, recPre = RECS.filter(b => b.pre).length;
   const hot = RECS.filter(b => b.open && dleft(b.bidClseDate) <= 3).length;
   $("#stats").innerHTML = [
     [ROWS.length.toLocaleString(), "기간 내 공고", ""],
