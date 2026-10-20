@@ -183,7 +183,7 @@ td.t { white-space: nowrap; font-family: var(--mono); font-size: 12.5px; color: 
   <section class="period" aria-label="기간">
     <span class="lbl">공고일</span>
     <div class="seg" id="quick">
-      <button type="button" data-q="1" aria-pressed="true">갱신일</button>
+      <button type="button" data-q="24h" aria-pressed="true">최근 24시간</button>
       <button type="button" data-q="7" aria-pressed="false">최근 7일</button>
       <button type="button" data-q="30" aria-pressed="false">최근 30일</button>
       <button type="button" data-q="all" aria-pressed="false">전체</button>
@@ -261,7 +261,7 @@ const PAGE = 300;   // 표에 한 번에 그리는 행 수
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const today = new Date(); today.setHours(0, 0, 0, 0);
-let META, CRIT, DAYDATA = {}, ROWS = [], LIST = [], RECS = [], shown = PAGE, quick = "1", bust = "";
+let META, CRIT, DAYDATA = {}, ROWS = [], LIST = [], RECS = [], shown = PAGE, quick = "24h", bust = "";
 
 /* ---------- 점수 (nara_bids.py 의 score 와 같은 규칙) ---------- */
 const isAlpha = c => /[a-z]/.test(c), isAlnum = c => /[a-z0-9가-힣]/.test(c), isAscii = s => /^[\x00-\x7f]*$/.test(s);
@@ -360,12 +360,18 @@ function periodDates() {
   const f = $("#from").value, t = $("#to").value;
   return dates().filter(d => (!f || d >= f) && (!t || d <= t));
 }
+const cutoff24h = () => new Date(Date.now() + 9 * 3600e3 - 24 * 3600e3).toISOString().slice(0, 16).replace("T", " ");   // "YYYY-MM-DD HH:MM" 한국시간
 function setQuick(q) {
   quick = q;
   $$("#quick button").forEach(b => b.setAttribute("aria-pressed", b.dataset.q === q));
   const ds = dates(); if (!ds.length) return;
+  if (q === "24h") {   // 지금(한국시간)부터 24시간 전까지. 날짜는 그 이틀치를 읽고 시각으로 거름
+    const since = cutoff24h().slice(0, 10);
+    $("#to").value = ds[0]; $("#from").value = since < ds[0] ? since : ds[0];
+    return;
+  }
   const n = q === "all" ? ds.length : Math.min(+q, ds.length);
-  // '갱신일'과 '최근 N일'은 공고가 있는 날 기준 (주말·휴일 건너뜀)
+  // '최근 N일'은 공고가 있는 날 기준 (주말·휴일 건너뜀)
   $("#to").value = ds[0]; $("#from").value = ds[n - 1];
 }
 async function loadPeriod() {
@@ -373,8 +379,9 @@ async function loadPeriod() {
   $("#tbody").innerHTML = `<tr><td colspan="10" class="empty">불러오는 중…</td></tr>`;
   await Promise.all([...ds.map(fetchDay), ...ds.map(fetchPre)]);
   ROWS = [];
-  const seen = new Map();
+  const seen = new Map(), cut = quick === "24h" ? cutoff24h() : "";
   for (const d of ds) for (const b of [...(DAYDATA[d] || []), ...(PREDATA[d] || [])]) {
+    if (cut && stamp(b) < cut) continue;
     const r = score(b, CRIT, new Date(d + "T00:00:00"));
     const row = { ...b, score: r ? r.score : null, why: r ? r.why : [], groups: r ? r.groups : [] };
     ROWS.push(row);
@@ -388,7 +395,8 @@ async function loadPeriod() {
   RECS = [...seen.values()].sort((a, b) => b.score - a.score || (a.bidClseDate || "9").localeCompare(b.bidClseDate || "9"));
   fillFilters();
   const f = $("#from").value, t = $("#to").value;
-  $("#avail").textContent = ds.length ? `${f === t ? f : f + " ~ " + t} · 공고가 있는 날 ${ds.length}일` : "선택한 기간에 수집된 공고가 없습니다";
+  $("#avail").textContent = cut ? `${cut} 이후 24시간 · 공고 ${ROWS.length.toLocaleString()}건`
+    : ds.length ? `${f === t ? f : f + " ~ " + t} · 공고가 있는 날 ${ds.length}일` : "선택한 기간에 수집된 공고가 없습니다";
   shown = PAGE; renderStats(); renderTable(); renderRecs(); renderTabs();
 }
 
@@ -715,7 +723,7 @@ async function init() {
     $("#stats").outerHTML = `<div class="empty">아직 수집된 데이터가 없습니다. 첫 자동 수집 뒤에 다시 열어 주세요.</div>`;
     return;
   }
-  setQuick("1");
+  setQuick("24h");
   ["#dq", "#dsort"].forEach(s => $(s).addEventListener("input", () => { shown = PAGE; renderTable(); }));
   ["#rq", "#ropen", "#rsoon"].forEach(s => $(s).addEventListener("input", renderRecs));
   const onFilter = () => { markFilters(); shown = PAGE; renderTable(); renderRecs(); saveFilters(); };
