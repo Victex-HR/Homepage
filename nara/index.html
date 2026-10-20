@@ -567,6 +567,7 @@ function renderRecs() {
         ${b.pre ? "" : `<span>${esc(b.cntrctCnclsMthdNm)} · ${esc(b.bidwinrDcsnMthdNm)}</span>`}
         <span>${b.pre ? "의견 마감" : "마감"} <span class="num">${esc(b.bidClseDate)} ${esc(b.bidClseTm)}</span></span>
         <span>공고 <span class="num">${esc(b.bidNtceDate)} ${esc(b.bidNtceBgn)}</span></span>
+        ${b.bidNtceUrl ? `<a class="out" href="${esc(b.bidNtceUrl)}" target="_blank" rel="noopener">${b.pre ? "규격서 ↓" : "나라장터 공고 보기 ↗"}</a>` : ""}
       </div>
       <div class="why">${whyChips(b.why)}</div>
     </article>`).join("") : `<div class="empty">이 기간에 조건에 맞는 추천 공고가 없습니다. 기간을 넓혀 보세요.</div>`;
