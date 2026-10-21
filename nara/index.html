@@ -173,7 +173,7 @@ td.t { white-space: nowrap; font-family: var(--mono); font-size: 12.5px; color: 
       <div class="sub" id="gen">불러오는 중…</div>
     </div>
     <div class="head-actions">
-      <button class="btn" type="button" id="refresh" title="최신 수집 결과를 다시 불러옵니다">
+      <button class="btn" type="button" id="refresh" title="나라장터에서 지금까지의 공고를 새로 받아옵니다">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>갱신</button>
       <button class="btn primary" type="button" id="excel">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>엑셀 다운로드</button>
@@ -664,48 +664,52 @@ let tt; function toast(t) { const el = $("#toast"); el.textContent = t; el.hidde
 async function loadMeta() {
   META = await (await fetch(DATA_BASE + "index.json" + bust, { cache: "no-cache" })).json();
   CRIT = META.criteria || {};
-  $("#gen").textContent = `마지막 수집 ${META.generated.replace("T", " ")} · 새 공고는 15분마다 자동 수집`;
+  $("#gen").textContent = `마지막 수집 ${META.generated.replace("T", " ")}` + (COLLECT_TIMES ? ` · 매일 ${COLLECT_TIMES} 자동 수집` : "");
   const ds = dates();
   ["#from", "#to"].forEach(s => { $(s).min = ds[ds.length - 1] || ""; $(s).max = ds[0] || ""; });
   const kw = (CRIT.keyword_groups || []).map(g => g.name).join(", ");
   $("#foot").textContent = `데이터: 조달청 나라장터 공공데이터개방표준서비스 (입찰공고정보), 사전규격정보서비스 · 추천 기준: ${kw}${(CRIT.agencies || []).length ? ", 발주처 " + CRIT.agencies.length + "곳" : ""}`;
 }
-// 갱신: 저장된 수집 결과를 다시 읽고, 실시간 조회 함수가 있으면 지금 시각까지 나라장터에서 바로 받아 합친다.
-async function liveFetch() {
-  let cfg; try { cfg = await (await fetch(DATA_BASE + "admin-config.json" + bust, { cache: "no-cache" })).json(); } catch (e) { return null; }
-  if (!cfg?.supabaseUrl || !cfg?.supabaseAnonKey) return null;
-  const url = cfg.supabaseUrl.replace(/\/$/, ""), anon = cfg.supabaseAnonKey;
-  const kst = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
-  const day = await fetchDay(kst);
-  const since = day.reduce((m, b) => { const t = `${b.bidNtceDate} ${b.bidNtceBgn}`; return t > m ? t : m; }, "");
-  const r = await fetch(`${url}/functions/v1/nara-live?since=${encodeURIComponent(since)}`,
-    { headers: { Authorization: "Bearer " + anon, apikey: anon }, signal: AbortSignal.timeout(90000) });
-  const res = await r.json();
-  if (!r.ok || res.error) throw new Error(res.error || r.status);
-  const have = new Set(day.map(b => b.bidNtceNo + "-" + b.bidNtceOrd));
-  const fresh = res.items.filter(b => b.bidNtceDate === res.date && !have.has(b.bidNtceNo + "-" + b.bidNtceOrd));
-  DAYDATA[res.date] = [...day, ...fresh];
-  let d = META.days.find(x => x.date === res.date);
-  if (!d) { d = { date: res.date, total: 0 }; META.days.unshift(d); META.days.sort((a, b) => b.date.localeCompare(a.date)); }
-  d.total = DAYDATA[res.date].length;
-  ["#from", "#to"].forEach(s => $(s).max = dates()[0]);
-  $("#gen").textContent = `나라장터 실시간 조회 ${res.fetched_at} · 오늘 공고 ${d.total.toLocaleString()}건`;
-  return { added: fresh.length, at: res.fetched_at };
+// 갱신: Supabase 에 수집 실행을 요청하고(5분에 한 번까지), 새 수집 결과가 올라올 때까지 기다렸다가 다시 읽는다.
+let SBCFG = null, COLLECT_TIMES = "";
+async function sbCfg() {
+  if (SBCFG) return SBCFG;
+  try { const c = await (await fetch(DATA_BASE + "admin-config.json" + bust, { cache: "no-cache" })).json();
+    if (c?.supabaseUrl && c?.supabaseAnonKey) SBCFG = { url: c.supabaseUrl.replace(/\/$/, ""), anon: c.supabaseAnonKey }; } catch (e) {}
+  return SBCFG;
 }
+async function sbRest(path, opt = {}) {
+  const c = await sbCfg(); if (!c) return null;
+  const r = await fetch(`${c.url}/rest/v1/${path}`, { ...opt, headers: { apikey: c.anon, Authorization: "Bearer " + c.anon, "Content-Type": "application/json" } });
+  if (!r.ok) throw new Error(r.status);
+  return r.json();
+}
+async function loadCollectTimes() {
+  try { const rows = await sbRest("settings?select=value&key=eq.collect_times");
+    COLLECT_TIMES = (rows?.[0]?.value || []).slice().sort().join("·"); } catch (e) {}
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 async function refresh() {
   const btn = $("#refresh"), before = META?.generated;
-  btn.disabled = true; btn.classList.add("spin"); toast("나라장터에서 지금까지의 공고를 받아오는 중입니다…");
+  btn.disabled = true; btn.classList.add("spin");
   try {
-    bust = "?t=" + Date.now(); DAYDATA = {}; PREDATA = {};
-    await loadMeta();
-    let live = null, liveErr = false;
-    try { live = await liveFetch(); } catch (e) { liveErr = true; }
+    let req = null;
+    try { req = await sbRest("rpc/request_collect", { method: "POST", body: "{}" }); } catch (e) { req = "error"; }
+    if (req === "started" || req === "recent") {
+      toast(req === "started" ? "나라장터에서 새 공고를 받는 중입니다. 2~3분 정도 걸립니다…" : "방금 수집을 시작했습니다. 끝나면 바로 보여 드립니다…");
+      for (let i = 0; i < 24; i++) {   // 최대 6분
+        await sleep(15000);
+        bust = "?t=" + Date.now();
+        await loadMeta();
+        if (META.generated !== before) break;
+      }
+    } else { bust = "?t=" + Date.now(); await loadMeta(); }
+    DAYDATA = {}; PREDATA = {};
     if (quick) setQuick(quick);
     await loadPeriod();
-    toast(live ? `${live.at} 기준으로 갱신했습니다. 새 공고 ${live.added.toLocaleString()}건.`
-      : liveErr ? "나라장터 실시간 조회에 실패해 마지막 자동 수집 결과를 보여 드립니다."
-      : META.generated !== before ? `새 수집 결과(${META.generated.replace("T", " ")})를 불러왔습니다.`
-      : "이미 최신입니다. 실시간 조회는 관리자 설정 뒤에 쓸 수 있습니다.");
+    toast(META.generated !== before ? `새 수집 결과(${META.generated.replace("T", " ")})를 불러왔습니다.`
+      : req === "error" ? "수집을 요청하지 못해 마지막 수집 결과를 보여 드립니다."
+      : req ? "수집이 아직 끝나지 않았습니다. 잠시 뒤 다시 눌러 주세요." : "마지막 수집 결과를 다시 불러왔습니다.");
   } catch (e) { toast("불러오지 못했습니다. 잠시 뒤 다시 눌러 주세요."); }
   finally { btn.disabled = false; btn.classList.remove("spin"); }
 }
@@ -718,6 +722,7 @@ function setTab(name) {
   $("#avail").style.opacity = name === "saved" ? .4 : 1;
 }
 async function init() {
+  await loadCollectTimes();
   try { await loadMeta(); }
   catch (e) {
     $("#gen").textContent = "";
