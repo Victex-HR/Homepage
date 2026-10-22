@@ -339,6 +339,10 @@ function fillSelect(sel, values) {
 /* ---------- 데이터 ---------- */
 const dates = () => META.days.filter(d => d.total > 0).map(d => d.date);   // 공고가 있는 날, 최신순
 let PREDATA = {};
+// 사전규격: 제목은 나라장터 상세 화면으로, '규격서 ↓'는 첫 파일 내려받기로 (예전 데이터는 공고 링크 자리에 파일 주소가 있었음)
+const PRE_PAGE = no => `https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo=${encodeURIComponent(no || "")}`;
+const pageUrl = b => b.pre ? PRE_PAGE(b.bidNtceNo) : b.bidNtceUrl;
+const specUrl = b => b.pre ? (b.specUrl ?? (/PRVA004/.test(b.bidNtceUrl || "") ? "" : b.bidNtceUrl)) : "";
 async function fetchPre(date) {
   if (!PREDATA[date]) {
     PREDATA[date] = [];
@@ -530,8 +534,7 @@ function renderTable() {
       <td class="n">${won(b.asignBdgtAmt)}</td>
       <td class="m">${b.pre ? "의견 등록 마감" : `${esc(b.cntrctCnclsMthdNm)}<br>${esc(b.bidwinrDcsnMthdNm)}`}</td>
       <td class="d">${esc((b.bidClseDate || "").slice(5))} ${esc(b.bidClseTm)}</td>
-      <td>${b.pre ? (b.bidNtceUrl ? `<a class="out" href="${esc(b.bidNtceUrl)}" target="_blank" rel="noopener" title="규격서 첫 파일 내려받기">규격서 ↓</a>` : "")
-        : `<a class="out" href="${esc(b.bidNtceUrl)}" target="_blank" rel="noopener">공고 ↗</a>`}</td>
+      <td style="white-space:nowrap"><a class="out" href="${esc(pageUrl(b))}" target="_blank" rel="noopener">공고 ↗</a>${specUrl(b) ? `<br><a class="out" href="${esc(specUrl(b))}" target="_blank" rel="noopener" title="규격서 첫 파일 내려받기">규격서 ↓</a>` : ""}</td>
     </tr>`).join("") : `<tr><td colspan="10" class="empty">${VIEW === "saved" && !Object.keys(SAVED).length ? "보관한 공고가 없습니다. 목록에서 ☆를 눌러 보관하세요." : "조건에 맞는 공고가 없습니다."}</td></tr>`;
   const rest = LIST.length - shown;
   $("#more").hidden = rest <= 0;
@@ -567,7 +570,7 @@ function renderRecs() {
   $("#recs").innerHTML = list.length ? list.slice(0, 300).map(b => `
     <article class="rec">
       <div class="score">${b.score}</div>
-      <h3>${starBtn(b)}${b.pre ? `<span class="chip pre">사전규격</span> ` : ""}<a href="${esc(b.bidNtceUrl)}" target="_blank" rel="noopener">${esc(b.bidNtceNm)}</a></h3>
+      <h3>${starBtn(b)}${b.pre ? `<span class="chip pre">사전규격</span> ` : ""}<a href="${esc(pageUrl(b))}" target="_blank" rel="noopener">${esc(b.bidNtceNm)}</a></h3>
       ${ddayHtml(b)}
       <div class="meta">
         <span class="chip t" style="color:${TYPE_COLOR[b.bsnsDivNm] || "var(--muted)"}">${esc(b.bsnsDivNm)}</span>
@@ -576,7 +579,8 @@ function renderRecs() {
         ${b.pre ? "" : `<span>${esc(b.cntrctCnclsMthdNm)} · ${esc(b.bidwinrDcsnMthdNm)}</span>`}
         <span>${b.pre ? "의견 마감" : "마감"} <span class="num">${esc(b.bidClseDate)} ${esc(b.bidClseTm)}</span></span>
         <span>공고 <span class="num">${esc(b.bidNtceDate)} ${esc(b.bidNtceBgn)}</span></span>
-        ${b.bidNtceUrl ? `<a class="out" href="${esc(b.bidNtceUrl)}" target="_blank" rel="noopener">${b.pre ? "규격서 ↓" : "나라장터 공고 보기 ↗"}</a>` : ""}
+        <a class="out" href="${esc(pageUrl(b))}" target="_blank" rel="noopener">나라장터 ${b.pre ? "사전규격" : "공고"} 보기 ↗</a>
+        ${specUrl(b) ? `<a class="out" href="${esc(specUrl(b))}" target="_blank" rel="noopener">규격서 ↓</a>` : ""}
       </div>
       <div class="why">${whyChips(b.why)}</div>
     </article>`).join("") : `<div class="empty">이 기간에 조건에 맞는 추천 공고가 없습니다. 기간을 넓혀 보세요.</div>`;
@@ -615,7 +619,7 @@ const XCOLS = [
   ["계약방법", 14, b => b.cntrctCnclsMthdNm], ["낙찰방법", 18, b => b.bidwinrDcsnMthdNm],
   ["지역제한", 18, b => b.rgnLmtYn === "Y" ? (b.prtcptPsblRgnNm || "있음") : ""], ["업종제한", 30, b => b.indstrytyLmtYn === "Y" ? (b.bidprcPsblIndstrytyNm || "있음") : ""],
   ["추천 사유", 40, b => (b.why || []).map(w => (w.g ? w.g + ": " : "") + w.t).join(" / ")],
-  ["공고번호", 18, b => `${b.bidNtceNo}-${b.bidNtceOrd}`], ["공고 보기", 10, b => b.bidNtceUrl ? "공고 보기" : ""],
+  ["공고번호", 18, b => `${b.bidNtceNo}-${b.bidNtceOrd}`], ["공고 보기", 10, b => pageUrl(b) ? "공고 보기" : ""],
 ];
 function sheetXml(rows) {
   const last = colName(XCOLS.length - 1), cell = (r, c, v, num, st) => {
@@ -624,14 +628,14 @@ function sheetXml(rows) {
     return num && typeof v === "number" ? `<c r="${ref}" s="${num === 2 ? 2 : 0}"><v>${v}</v></c>` : `<c r="${ref}" t="inlineStr"${st ? ` s="${st}"` : ""}><is><t xml:space="preserve">${xe(v)}</t></is></c>`;
   };
   const head = `<row r="1">${XCOLS.map(([h], c) => cell(1, c, h, 0, 1)).join("")}</row>`;
-  const body = rows.map((b, i) => `<row r="${i + 2}">${XCOLS.map(([, , f, num], c) => cell(i + 2, c, f(b), num, c === XCOLS.length - 1 && b.bidNtceUrl ? 3 : 0)).join("")}</row>`).join("");
-  const links = rows.map((b, i) => b.bidNtceUrl ? `<hyperlink ref="${last}${i + 2}" r:id="h${i}"/>` : "").join("");
+  const body = rows.map((b, i) => `<row r="${i + 2}">${XCOLS.map(([, , f, num], c) => cell(i + 2, c, f(b), num, c === XCOLS.length - 1 && pageUrl(b) ? 3 : 0)).join("")}</row>`).join("");
+  const links = rows.map((b, i) => pageUrl(b) ? `<hyperlink ref="${last}${i + 2}" r:id="h${i}"/>` : "").join("");
   const xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">`
     + `<sheetViews><sheetView workbookViewId="0"><pane xSplit="0" ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>`
     + `<cols>${XCOLS.map(([, w], c) => `<col min="${c + 1}" max="${c + 1}" width="${w}" customWidth="1"/>`).join("")}</cols>`
     + `<sheetData>${head}${body}</sheetData><autoFilter ref="A1:${last}${rows.length + 1}"/>${links ? `<hyperlinks>${links}</hyperlinks>` : ""}</worksheet>`;
   const rels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">`
-    + rows.map((b, i) => b.bidNtceUrl ? `<Relationship Id="h${i}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="${xe(b.bidNtceUrl)}" TargetMode="External"/>` : "").join("") + `</Relationships>`;
+    + rows.map((b, i) => pageUrl(b) ? `<Relationship Id="h${i}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="${xe(pageUrl(b))}" TargetMode="External"/>` : "").join("") + `</Relationships>`;
   return [xml, rels];
 }
 function makeXlsx(sheets) {

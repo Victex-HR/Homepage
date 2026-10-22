@@ -129,6 +129,8 @@ def rebuild_index(cfg, state=None):
             continue
         rows = json.load(open(f, encoding="utf-8"))
         for r in rows:
+            if "specUrl" not in r:    # 예전 파일: 공고 링크 자리에 규격서 파일 주소가 들어 있었음
+                r["specUrl"], r["bidNtceUrl"] = r.get("bidNtceUrl", ""), pre_url(r.get("bidNtceNo"))
             r["score"], r["why"] = nb.score(r, cfg, dt.date(int(d[:4]), int(d[4:6]), int(d[6:])))
         json.dump(rows, open(f, "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))
         pre_index.append({"date": f"{d[:4]}-{d[4:6]}-{d[6:]}", "total": len(rows),
@@ -189,6 +191,10 @@ def pre_page(key, op, begin, end, page):
     return items, int(body.get("totalCount") or 0)
 
 
+def pre_url(no):
+    return f"https://www.g2b.go.kr/link/PRVA004_02/single/?bfSpecRegNo={no}" if no else ""
+
+
 def pre_slim(r, kind):
     """사전규격 한 건을 공고 목록과 같은 모양으로 바꾼다 (점수 계산·화면 재사용)."""
     g = lambda *ks: next((str(r[k]) for k in ks if r.get(k) not in (None, "")), "")
@@ -203,7 +209,8 @@ def pre_slim(r, kind):
         "bidClseDate": close[:10], "bidClseTm": close[11:16], "opengDate": "", "opengTm": "",
         "asignBdgtAmt": g("asignBdgtAmt"), "presmptPrce": "", "rgnLmtYn": "", "prtcptPsblRgnNm": "",
         "indstrytyLmtYn": "", "bidprcPsblIndstrytyNm": "",
-        "bidNtceUrl": g("specDocFileUrl1"),   # 규격서 첫 파일 (나라장터 내려받기 주소)
+        "bidNtceUrl": pre_url(no),            # 나라장터 사전규격 상세 화면
+        "specUrl": g("specDocFileUrl1"),      # 규격서 첫 파일 (나라장터 내려받기 주소)
         "pre": 1, "bidNtceNoList": g("bidNtceNoList"), "ofcl": " ".join(x for x in (g("ofclNm"), g("ofclTelNo")) if x),
     }
 
