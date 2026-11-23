@@ -107,6 +107,29 @@ create policy "settings admin write" on public.settings for all using (public.is
 insert into public.settings (key, value) values ('criteria', '{"company_name": "우리 회사", "keyword_groups": [{"name": "탄소포집", "keywords": ["CCU", "CCUS", "탄소", "탄소포집", "배출권", "액화", "액화탄산", "CO2", "LCO2", "이산화탄소", "Column", "Absorber", "Stripper", "흡수탑", "재생탑", "드라이아이스", "Dry Ice", "바이오가스", "수소", "블루수소", "청록수소", "청정수소", "그린수소"]}, {"name": "원전해체", "keywords": ["원전", "원전해체", "원자력", "방사능", "방사성", "매니퓰레이터", "원격조작기", "Manipulator", "핫셀", "hot cell", "실증분석동", "기장연구로", "기장로", "^고리", "신고리", "월성", "연구로", "중수로", "경수로", "PWR", "PHWR", "방사화", "텔레스코프", "텔레스코픽", "제염", "원자로"]}], "agencies": ["한국전력공사", "한국수력원자력", "한국원자력환경복원연구원", "한전케이피에스", "제이엔케이글로벌", "두산에너빌리티", "대우", "기초과학연구원", "포스코", "한전전력연구원", "한국원자력연구원", "고등기술연구원", "한국가스기술공사", "재단법인강원테크노파크", "한국에너지기술연구원"], "business_types": [], "exclude_keywords": [], "regions": [], "min_budget": 0, "max_budget": 0, "allowed_industries": [], "min_days_to_deadline": 1, "top_n": 20}'::jsonb)
   on conflict (key) do nothing;
 
+-- 보관함 (공개 화면의 ☆, 모두가 함께 씀) ------------------------------------------
+-- 수집 봇이 보관 공고의 상태(사전규격 → 본공고 → 정정 → 마감 → 개찰)를 확인해 stage 를 바꾸고 알림 메일을 보낸다.
+create table if not exists public.saved_bids (
+  key text primary key,                -- B:공고번호-차수 / P:사전규격번호-000
+  kind text not null check (kind in ('bid', 'pre')),
+  item jsonb not null,                 -- 보관할 때의 공고 내용 (화면 표시용)
+  stage text,                          -- 지금 상태 (봇이 씀)
+  stage_note text,
+  stage_at timestamptz,
+  history jsonb not null default '[]'::jsonb,
+  created_at timestamptz not null default now()
+);
+alter table public.saved_bids add column if not exists timeline jsonb;   -- 진행 단계 카드·개찰 참여 업체 (봇이 씀)
+alter table public.saved_bids enable row level security;
+drop policy if exists "saved read" on public.saved_bids;
+create policy "saved read" on public.saved_bids for select using (true);
+drop policy if exists "saved add" on public.saved_bids;
+create policy "saved add" on public.saved_bids for insert
+  with check (stage is null and stage_note is null and stage_at is null and history = '[]'::jsonb and timeline is null);
+drop policy if exists "saved remove" on public.saved_bids;
+create policy "saved remove" on public.saved_bids for delete using (true);
+-- 상태(stage) 변경은 수집 봇(service_role)만 한다
+
 -- 처음 값 ------------------------------------------------------------------
 insert into public.recipients (email, name) values ('jhw82@victex.co.kr', '')
   on conflict (email) do nothing;

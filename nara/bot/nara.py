@@ -9,6 +9,7 @@ GitHub Actions 가 매시간 `python nara.py tick` 을 실행한다.
   python nara.py update-site               # 최근 3일 수집 + nara/data 갱신
   python nara.py excel --date 20261012     # out/ 에 엑셀 생성
   python nara.py send-test --to a@b.com    # 어제 엑셀을 한 주소로 시험 발송
+  python nara.py track-saved               # 보관함 공고 상태 확인 + 바뀐 것 알림 메일 (tick 끝에도 실행)
 
 환경 변수 (GitHub 저장소 Secrets)
   NARA_API_KEY            공공데이터포털 일반 인증키(Decoding)
@@ -24,6 +25,7 @@ import os
 import smtplib
 import ssl
 import sys
+import urllib.error
 import urllib.parse
 import urllib.request
 from email.message import EmailMessage
@@ -460,6 +462,444 @@ def fallback_due(now):
     return []
 
 
+# ---------------------------------------------------------------- 보관함 상태 알림
+# 공개 화면 보관함(Supabase saved_bids)의 공고마다 지금 상태를 정해, 바뀌었으면 기록하고 메일로 알린다.
+# 사전규격 → 본공고 등록 → 정정공고 → 입찰 마감 → 개찰 완료 → 최종낙찰
+# 같은 공고 판별은 사전규격번호로 한다 (나뉜 공고, 취소·유찰 뒤 재공고)
+OPEN_URL = "https://apis.data.go.kr/1230000/as/ScsbidInfoService/"
+OPEN_OPS = {"물품": "getOpengResultListInfoThng", "용역": "getOpengResultListInfoServc",
+            "공사": "getOpengResultListInfoCnstwk", "외자": "getOpengResultListInfoFrgcpt"}
+WIN_OPS = {"물품": "getScsbidListSttusThng", "용역": "getScsbidListSttusServc",
+           "공사": "getScsbidListSttusCnstwk", "외자": "getScsbidListSttusFrgcpt"}
+CNTRCT_URL = "https://apis.data.go.kr/1230000/ao/CntrctInfoService/"
+CNTRCT_OPS = {"물품": "getCntrctInfoListThng", "용역": "getCntrctInfoListServc",
+              "공사": "getCntrctInfoListCnstwk", "외자": "getCntrctInfoListFrgcpt"}
+CNTRCT_STATE = os.path.join(DATA, "contract-scan.json")   # 계약 등록 목록을 어디까지 훑었는지 + 보관 공고와 맞는 계약
+PRE_OP_BY_KIND = {v: k for k, v in PRE_OPS.items()}
+
+
+
+def api_items(url, params, total=False):
+    """공공데이터포털 목록 API 한 쪽. 활용신청이 안 된 키면 PermissionError. total=True 면 (목록, 전체 건수)."""
+    q = urllib.parse.urlencode({"ServiceKey": os.environ.get("NARA_API_KEY"), "numOfRows": 20, "pageNo": 1,
+                                "type": "json", **params})
+    for attempt in range(4):
+        try:
+            with urllib.request.urlopen(f"{url}?{q}", timeout=30) as r:
+                data = json.loads(r.read().decode("utf-8"))
+            break
+        except urllib.error.HTTPError as e:    # 활용신청 안 된 키는 403 과 함께 사유를 JSON 으로 보냄
+            try:
+                data = json.loads(e.read().decode("utf-8"))
+                break
+            except ValueError:
+                if attempt == 3:
+                    raise RuntimeError(f"API 호출 실패: {e}")
+            nb.time.sleep(2 ** (attempt + 1))
+        except (OSError, ValueError) as e:
+            if attempt == 3:
+                raise RuntimeError(f"API 호출 실패: {e}")
+            nb.time.sleep(2 ** (attempt + 1))
+    if "OpenAPI_ServiceResponse" in data:
+        h = data["OpenAPI_ServiceResponse"].get("cmmMsgHeader", {})
+        raise PermissionError(h.get("returnAuthMsg") or h.get("errMsg"))
+    if "nkoneps.com.response.ResponseError" in data:
+        h = data["nkoneps.com.response.ResponseError"].get("header", {})
+        raise RuntimeError(f"API 오류 {h.get('resultCode')}: {h.get('resultMsg')}")
+    body = data.get("response", data).get("body", {})
+    items = body.get("items") or []
+    if isinstance(items, dict):
+        items = items.get("item", [])
+    items = [items] if isinstance(items, dict) else items
+    return (items, int(body.get("totalCount") or 0)) if total else items
+
+
+def at_kst(d, t):
+    try:
+        return dt.datetime.fromisoformat(f"{d} {t or '00:00'}").replace(tzinfo=KST)
+    except ValueError:
+        return None
+
+
+class Tracker:
+    def __init__(self):
+        self.now = now_kst()
+        self.bids, self.pres = {}, {}
+        for f in sorted(glob.glob(os.path.join(DAYS, "*.json"))):
+            for r in json.load(open(f, encoding="utf-8")):
+                self.bids.setdefault(r["bidNtceNo"], {})[r["bidNtceOrd"]] = r
+        self.pre_of = {}      # 입찰공고번호 → 사전규격번호 (같은 사전규격에서 나온 공고끼리 묶음)
+        for f in sorted(glob.glob(os.path.join(PRE, "*.json"))):
+            for r in json.load(open(f, encoding="utf-8")):
+                self.pres[r["bidNtceNo"]] = r
+                for bno in (r.get("bidNtceNoList") or "").split(","):
+                    if bno.strip():
+                        self.pre_of[bno.strip()] = r["bidNtceNo"]
+        self.open_api = True      # 낙찰정보서비스 활용신청 여부 (처음 거절되면 이번 실행에선 더 부르지 않음)
+        self.open_api_msg = ""
+        self.open_cache = {}
+        try:
+            self.cstate = json.load(open(CNTRCT_STATE, encoding="utf-8"))
+        except (OSError, ValueError):
+            self.cstate = {}
+        self.cstate.setdefault("hits", {})
+
+    def call_open(self, ops, no):
+        """낙찰정보서비스 한 종류(개찰결과/최종낙찰) 조회. 못 부르면 None."""
+        if not self.open_api:
+            return None
+        if (ops, no) in self.open_cache:
+            return self.open_cache[(ops, no)]
+        try:
+            got = [x for x in api_items(OPEN_URL + ops, {"inqryDiv": 4, "bidNtceNo": no}) if x.get("bidNtceNo") == no]
+            self.open_cache[(ops, no)] = got
+            return got
+        except PermissionError as e:
+            self.open_api, self.open_api_msg = False, f"개찰·낙찰 결과는 낙찰정보서비스 활용신청 뒤에 확인됩니다 ({e})"
+            print(self.open_api_msg, flush=True)
+        except RuntimeError as e:
+            print(f"개찰 결과 조회 실패 {no}: {e}", flush=True)
+        return None
+
+    def opening(self, no, kind):
+        """개찰 결과와 최종낙찰. 한 공고가 여러 분류(분리 발주)로 나뉘면 분류마다 따로 본다. 없으면 None."""
+        if kind not in OPEN_OPS:
+            return None
+        items = self.call_open(OPEN_OPS[kind], no)
+        if not items:
+            return None
+        lots = {}
+        for x in items:     # 같은 분류는 최신 차수만
+            k = str(x.get("bidClsfcNo") or "0")
+            if k not in lots or str(x.get("bidNtceOrd") or "") > str(lots[k].get("bidNtceOrd") or ""):
+                lots[k] = x
+        wins = {str(x.get("bidClsfcNo") or "0"): x for x in self.call_open(WIN_OPS[kind], no) or []}
+        parts, stages = [], []
+        for k, it in sorted(lots.items()):
+            prog = str(it.get("progrsDivCdNm") or it.get("opengRsltDivNm") or "")
+            first = str(it.get("opengCorpInfo") or "").split("^")
+            w = wins.get(k)
+            if w and w.get("bidwinnrNm"):
+                st, nt = "최종낙찰", f"{w['bidwinnrNm']}" + (f" {nb.to_int(w.get('sucsfbidAmt')):,}원" if nb.to_int(w.get("sucsfbidAmt")) else "")
+            elif "유찰" in prog:
+                st, nt = "유찰", str(it.get("opengRsltNtcCntnts") or "") or prog
+            else:
+                st = "개찰 완료"
+                nt = f"1순위 {first[0]}" if first and first[0] else prog
+                if it.get("prtcptCnum"):
+                    nt += f" · 참가 {it['prtcptCnum']}곳"
+            stages.append(st)
+            parts.append((f"{k}분류 " if len(lots) > 1 else "") + f"{st}: {nt}".rstrip(": "))
+        stage = stages[0] if len(set(stages)) == 1 else " / ".join(stages)
+        if len(lots) > 1:
+            stage = f"{stage} ({len(lots)}개 분류)"
+        return stage, " · ".join(parts)
+
+    def bid_stage(self, no, item):
+        rows = self.bids.get(no) or {}
+        b = dict(item)
+        for o in sorted(rows):      # 최신 차수 기준, 빈 칸은 앞 차수 값으로
+            b.update({k: v for k, v in rows[o].items() if v not in (None, "")})
+        ord_ = b.get("bidNtceOrd") or "000"
+        when = lambda label, d, t: f"{label} {d} {t or ''}".strip() if d else ""
+        if "취소" in (b.get("bidNtceSttusNm") or ""):
+            return "취소공고", ""
+        c = self.cstate["hits"].get(no)
+        if c:
+            return "계약 체결", " ".join(x for x in (c.get("corp"), c.get("date")) if x)
+        close = at_kst(b.get("bidClseDate"), b.get("bidClseTm"))
+        opening = at_kst(b.get("opengDate"), b.get("opengTm"))
+        res = self.opening(no, b.get("bsnsDivNm")) if opening and self.now >= opening else None
+        if res:
+            return res
+        if (close or opening) and self.now >= (close or opening):
+            return "입찰 마감", when("개찰", b.get("opengDate"), b.get("opengTm"))
+        if ord_ > "000" or (b.get("bidNtceSttusNm") or "") == "정정공고":
+            return f"정정공고 ({int(ord_)}차)", when("마감", b.get("bidClseDate"), b.get("bidClseTm"))
+        return "입찰공고", when("마감", b.get("bidClseDate"), b.get("bidClseTm"))
+
+    def pre_links(self, pre_no, kind):
+        """사전규격번호로 이어진 입찰공고번호들. 파일에 없거나 비어 있으면 번호로 직접 조회."""
+        links = (self.pres.get(pre_no) or {}).get("bidNtceNoList") or ""
+        if not links:      # 접수일이 오래된 사전규격은 파일에 다시 받지 않음
+            op = PRE_OP_BY_KIND.get(kind)
+            try:
+                got = api_items(PRE_URL + op, {"inqryDiv": 2, "bfSpecRgstNo": pre_no}) if op else []
+                links = next((str(x.get("bidNtceNoList")) for x in got if x.get("bidNtceNoList")), "")
+            except (PermissionError, RuntimeError) as e:
+                print(f"사전규격 조회 실패 {pre_no}: {e}", flush=True)
+        return list(dict.fromkeys(x.strip() for x in links.split(",") if x.strip()))
+
+    def group_stage(self, nos, kind):
+        """같은 사전규격번호로 나온 입찰공고들의 상태.
+        나뉜 공고(여러 건)는 각각 적고, 취소·유찰 뒤 같은 사전규격번호로 다시 나온 공고는 재공고로 이어 본다."""
+        got = []
+        for bno in nos:
+            rows = self.bids.get(bno) or {}
+            first = rows[min(rows)] if rows else {}
+            st, nt = self.bid_stage(bno, {"bidNtceNo": bno, "bidNtceOrd": "000", "bsnsDivNm": kind})
+            got.append({"no": bno, "date": first.get("bidNtceDate") or "", "nm": first.get("bidNtceNm") or "",
+                        "stage": "본공고 등록" if st == "입찰공고" else st, "note": nt})
+        dead = lambda g: g["stage"] == "취소공고" or g["stage"].startswith("유찰")
+        live = [g for g in got if not dead(g)]
+        for g in live:      # 이 공고보다 먼저 나왔다가 취소·유찰된 공고가 있으면 재공고
+            before = [d for d in got if dead(d) and d["date"] <= g["date"] and d["no"] < g["no"]]
+            if before:
+                g["stage"], g["note"] = f"재공고 · {g['stage']}", f"{before[-1]['no']} {before[-1]['stage']} 뒤 " + (g["note"] or "")
+        show = live or got
+        if len(show) == 1:
+            g = show[0]
+            return g["stage"], f"공고번호 {g['no']}" + (f" · {g['note'].strip()}" if g["note"].strip() else "")
+        stages = [g["stage"] for g in show]
+        stage = stages[0] if len(set(stages)) == 1 else " / ".join(stages)
+        return f"본공고 {len(show)}건 · {stage}", " · ".join(
+            f"{g['no']}" + (f" {g['nm'][:30]}" if g["nm"] else "") + f" {g['stage']}" for g in show)
+
+    def pre_stage(self, item):
+        no = item.get("bidNtceNo")
+        nos = self.pre_links(no, item.get("bsnsDivNm"))
+        if nos:
+            return self.group_stage(nos, item.get("bsnsDivNm"))
+        cur = self.pres.get(no) or item
+        close = at_kst(cur.get("bidClseDate"), cur.get("bidClseTm"))
+        if close and self.now >= close:
+            return "사전규격 의견 마감", "본공고 기다리는 중"
+        return "사전규격 공개", f"의견 마감 {cur.get('bidClseDate', '')} {cur.get('bidClseTm', '')}".strip()
+
+    def saved_bid_stage(self, item):
+        """보관한 입찰공고. 사전규격에서 나온 공고면 같은 사전규격번호의 공고(나뉜 공고·재공고)까지 함께 본다."""
+        no = item.get("bidNtceNo")
+        pre_no = self.pre_of.get(no)
+        if pre_no:
+            nos = self.pre_links(pre_no, item.get("bsnsDivNm")) or [no]
+            if len(nos) > 1:
+                stage, note = self.group_stage(nos, item.get("bsnsDivNm"))
+                return stage, f"사전규격 {pre_no} · {note}"
+        return self.bid_stage(no, item)
+
+    # ---- 진행 단계 이력 (나라장터 '진행사항'과 같은 순서) ----
+    def group_of(self, row):
+        """(사전규격번호, 같은 사전규격번호의 입찰공고번호들)."""
+        item, kind = row["item"], row["item"].get("bsnsDivNm")
+        if row["kind"] == "pre":
+            pre_no = item.get("bidNtceNo")
+            return pre_no, self.pre_links(pre_no, kind)
+        no = item.get("bidNtceNo")
+        pre_no = self.pre_of.get(no)
+        nos = self.pre_links(pre_no, kind) if pre_no else []
+        return pre_no, nos if no in nos else [no] + nos
+
+    def bidders(self, no, kind):
+        """개찰 참여 업체 (낙찰정보서비스 개찰완료 목록, 첫 분류). 못 부르면 []."""
+        if kind not in OPEN_OPS:
+            return []
+        res = self.call_open(OPEN_OPS[kind], no) or []
+        if not res:
+            return []
+        it = max(res, key=lambda x: (str(x.get("bidNtceOrd") or ""), str(x.get("rbidNo") or "")))
+        try:
+            items = api_items(OPEN_URL + "getOpengResultListInfoOpengCompt",
+                              {"bidNtceNo": no, "bidNtceOrd": it.get("bidNtceOrd") or "000", "bidClsfcNo": it.get("bidClsfcNo") or "0",
+                               "rbidNo": it.get("rbidNo") or "000", "numOfRows": 100})
+        except (PermissionError, RuntimeError) as e:
+            print(f"개찰 업체 조회 실패 {no}: {e}", flush=True)
+            return []
+        out = [{"rank": str(x.get("opengRank") or ""), "name": str(x.get("prcbdrNm") or ""), "ceo": str(x.get("prcbdrCeoNm") or ""),
+                "amt": nb.to_int(x.get("bidprcAmt")) or None, "rate": str(x.get("bidprcrt") or ""), "note": str(x.get("rmrk") or "")}
+               for x in items]
+        out.sort(key=lambda r: int(r["rank"]) if r["rank"].isdigit() else 9999)
+        return out[:100]
+
+    def scan_contracts(self, wanted):
+        """지난번 이후 등록된 계약 목록을 훑어 wanted(입찰공고번호) 와 맞는 계약을 모은다. 상태가 바뀌면 True."""
+        if not wanted:
+            return False
+        now = self.now
+        last = self.cstate.get("last")
+        start = dt.datetime.strptime(last, "%Y%m%d%H%M").replace(tzinfo=KST) if last else now - dt.timedelta(days=7)
+        start = max(start, now - dt.timedelta(days=7))      # 한 번에 최대 7일
+        changed = False
+        wins, a = [], start      # 조회 기간은 하루 단위로 (길게 주면 '입력범위값 초과')
+        while a < now:
+            b = min(dt.datetime.combine(a.date(), dt.time(23, 59), KST), now)
+            wins.append((a, b))
+            a = dt.datetime.combine(a.date() + dt.timedelta(days=1), dt.time(0, 0), KST)
+        try:
+            for (wa, wb), (kind, op) in ((w, k) for w in wins for k in CNTRCT_OPS.items()):
+                page, seen = 1, 0
+                while True:
+                    items, total = api_items(CNTRCT_URL + op, {"inqryDiv": 1, "inqryBgnDt": f"{wa:%Y%m%d%H%M}",
+                                                                "inqryEndDt": f"{wb:%Y%m%d%H%M}", "numOfRows": 999, "pageNo": page}, total=True)
+                    for c in items:
+                        no = str(c.get("ntceNo") or "")
+                        prev = self.cstate["hits"].get(no)
+                        if no in wanted and not (prev and (prev.get("date") or "9") <= (c.get("cntrctDate") or "9")):    # 최초 계약만
+                            corp = str(c.get("corpList") or "").strip("[]").split("^")
+                            self.cstate["hits"][no] = {"no": c.get("untyCntrctNo"), "date": c.get("cntrctDate") or c.get("cntrctCnclsDate"),
+                                                       "req": c.get("reqNo"), "corp": corp[3] if len(corp) > 3 else "",
+                                                       "amt": nb.to_int(c.get("totCntrctAmt")) or None, "url": c.get("cntrctDtlInfoUrl")}
+                            changed = True
+                    seen += len(items)
+                    if not items or seen >= total or page >= 30:
+                        break
+                    page += 1
+        except PermissionError as e:
+            print(f"계약 목록: 계약정보서비스 활용신청이 필요합니다 ({e})", flush=True)
+            return changed
+        except RuntimeError as e:
+            print(f"계약 목록 조회 실패: {e}", flush=True)
+            return changed
+        self.cstate["last"] = f"{now:%Y%m%d%H%M}"
+        self.cstate["hits"] = {k: v for k, v in self.cstate["hits"].items() if k in wanted}
+        json.dump(self.cstate, open(CNTRCT_STATE, "w", encoding="utf-8"), ensure_ascii=False)
+        return True
+
+    def timeline(self, row):
+        """보관 공고 한 건의 단계 카드 목록과 개찰 참여 업체."""
+        kind = row["item"].get("bsnsDivNm")
+        pre_no, nos = self.group_of(row)
+        pre = self.pres.get(pre_no) or (row["item"] if row["kind"] == "pre" else {})
+        bids = []
+        for no in nos:
+            rows = self.bids.get(no) or {}
+            b = {}
+            for o in sorted(rows):
+                b.update({k: v for k, v in rows[o].items() if v not in (None, "")})
+            if not b and no == row["item"].get("bidNtceNo") and row["kind"] == "bid":
+                b = row["item"]
+            bids.append((no, b))
+        bids.sort(key=lambda x: (x[1].get("bidNtceDate") or "", x[0]))
+        posted = [(no, b) for no, b in bids if b.get("bidNtceDate")] or bids
+        opened = [(no, b) for no, b in bids if at_kst(b.get("opengDate"), b.get("opengTm")) and
+                  self.now >= at_kst(b.get("opengDate"), b.get("opengTm"))]
+        need = lambda svc: {"need": svc}
+        first = lambda lst, k: (lst[-1][1].get(k) if lst else "") or ""
+        hit = next((self.cstate["hits"][no] for no in nos[::-1] if no in self.cstate["hits"]), None)
+        steps = [
+            {"name": "발주계획", "done": False, "f": [["발주계획번호", ""], ["발주일자", ""]], **need("발주계획현황서비스")},
+            {"name": "요청접수", "done": bool(hit and hit.get("req")), "f": [["요청접수번호", (hit or {}).get("req") or ""], ["접수처리일자", ""]]},
+            {"name": "사전규격", "done": bool(pre_no), "f": [["사전규격번호", pre_no or ""], ["규격공개일자", pre.get("bidNtceDate") or ""]]},
+            {"name": "입찰공고", "done": bool(posted and posted[-1][0]), "n": len(nos),
+             "f": [["입찰공고번호", posted[-1][0] if posted else ""], ["공고게시일자", first(posted, "bidNtceDate")]]},
+            {"name": "개찰", "done": bool(opened), "n": len(opened),
+             "f": [["입찰공고번호", opened[-1][0] if opened else (posted[-1][0] if posted else "")],
+                   ["개찰일자", first(opened, "opengDate") or first(posted, "opengDate")]]},
+            {"name": "계약", "done": bool(hit), "f": [["계약번호", (hit or {}).get("no") or ""], ["최초계약일자", (hit or {}).get("date") or ""]],
+             **({"corp": hit.get("corp"), "amt": hit.get("amt"), "url": hit.get("url")} if hit else {})},
+            {"name": "검사검수", "done": False, "f": [["통합검수번호", ""], ["검수일자", ""]]},
+            {"name": "대금지급", "done": False, "f": [["통합지급번호", ""], ["지급요청일자", ""]]},
+        ]
+        bidders = []
+        for no, b in opened[-1:]:
+            bidders = self.bidders(no, b.get("bsnsDivNm") or kind)
+        return {"steps": steps, "bidders": bidders, "at": self.now.isoformat(timespec="minutes")}
+
+    def stage(self, row):
+        item = row["item"]
+        if row["kind"] == "pre":
+            return self.pre_stage(item)
+        return self.saved_bid_stage(item)
+
+
+def track_saved():
+    """보관함 공고의 상태를 확인. 바뀐 것은 기록하고 [(공고, 이전, 새 상태, 설명)] 반환."""
+    rows = sb("GET", "saved_bids?select=key,kind,item,stage,history,timeline") or []
+    if not rows:
+        return [], ""
+    t, events = Tracker(), []
+    wanted = set()
+    for r in rows:      # 계약은 입찰공고번호로 바로 찾을 수 없어 새로 등록된 계약 목록을 훑어 맞춰 본다
+        try:
+            wanted.update(t.group_of(r)[1])
+        except Exception as e:  # noqa: BLE001
+            print(f"보관 공고 {r['key']} 묶음 확인 실패: {e}", flush=True)
+    t.contracts_changed = t.scan_contracts(wanted)
+    for r in rows:
+        try:
+            stage, note = t.stage(r)
+        except Exception as e:  # noqa: BLE001 - 한 건 문제로 나머지를 멈추지 않음
+            print(f"보관 공고 {r['key']} 확인 실패: {e}", flush=True)
+            continue
+        try:        # 진행 단계 카드 (보관함에서 공고를 누르면 보임)
+            tl = t.timeline(r)
+            old = r.get("timeline") or {}
+            if (old.get("steps"), old.get("bidders")) != (tl["steps"], tl["bidders"]):
+                sb("PATCH", f"saved_bids?key=eq.{urllib.parse.quote(r['key'])}", {"timeline": tl})
+        except Exception as e:  # noqa: BLE001
+            print(f"보관 공고 {r['key']} 이력 만들기 실패: {e}", flush=True)
+        if stage == r.get("stage"):
+            continue
+        at = t.now.isoformat(timespec="seconds")
+        hist = (r.get("history") or []) + [{"stage": stage, "note": note, "at": at}]
+        sb("PATCH", f"saved_bids?key=eq.{urllib.parse.quote(r['key'])}",
+           {"stage": stage, "stage_note": note, "stage_at": at, "history": hist[-20:]})
+        if r.get("stage"):        # 처음 확인한 상태는 알리지 않고 기록만
+            events.append((r["item"], r["stage"], stage, note))
+    print(f"보관함 {len(rows)}건 확인, 상태 변경 {len(events)}건", flush=True)
+    track_saved.contracts_changed = t.contracts_changed
+    return events, t.open_api_msg
+
+
+def send_alert(to, events, extra=""):
+    host, user = os.environ.get("SMTP_HOST"), os.environ.get("SMTP_USER")
+    if not host or not to:
+        raise RuntimeError("SMTP_HOST 또는 수신자가 없습니다")
+    port = int(os.environ.get("SMTP_PORT") or 465)
+    esc = lambda s: str(s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    link = lambda b: (pre_url(b.get("bidNtceNo")) if b.get("pre") else b.get("bidNtceUrl")) or ""
+    msg = EmailMessage()
+    first = events[0][0].get("bidNtceNm", "")
+    msg["Subject"] = f"[나라장터] 보관함 상태 변경 {len(events)}건: {first[:40]}" + (" 외" if len(events) > 1 else "")
+    msg["From"] = os.environ.get("MAIL_FROM") or user
+    msg["To"] = ", ".join(to)
+    lines = ["보관함에 넣어 둔 공고의 상태가 바뀌었습니다.", ""]
+    lines += [f"- {b.get('bidNtceNm')} / {b.get('ntceInsttNm')}\n  {old} → {new}" + (f" ({note})" if note else "") + f"\n  {link(b)}"
+              for b, old, new, note in events]
+    if extra:
+        lines += ["", extra]
+    if PAGE_URL:
+        lines += ["", f"보관함 보기: {PAGE_URL}"]
+    msg.set_content("\n".join(lines))
+    trs = "".join(
+        f'<tr><td style="padding:8px;border-top:1px solid #dde3e9"><a href="{esc(link(b))}">{esc(b.get("bidNtceNm"))}</a><br>'
+        f'<span style="color:#5b6875;font-size:12px">{esc(b.get("ntceInsttNm"))}</span></td>'
+        f'<td style="padding:8px;border-top:1px solid #dde3e9;white-space:nowrap"><span style="color:#5b6875">{esc(old)}</span> → '
+        f'<b style="color:#0b6b63">{esc(new)}</b><br><span style="color:#5b6875;font-size:12px">{esc(note)}</span></td></tr>'
+        for b, old, new, note in events)
+    msg.add_alternative(
+        f'<div style="font-family:Malgun Gothic,Apple SD Gothic Neo,sans-serif;font-size:14px;color:#16202a">'
+        f'<p>보관함에 넣어 둔 공고 <b>{len(events)}건</b>의 상태가 바뀌었습니다.</p>'
+        f'<table style="border-collapse:collapse">{trs}</table>'
+        + (f'<p style="color:#5b6875;font-size:12px">{esc(extra)}</p>' if extra else "")
+        + (f'<p><a href="{PAGE_URL}">보관함 보기</a></p>' if PAGE_URL else "") + "</div>", subtype="html")
+    ctx = ssl.create_default_context()
+    if port == 465:
+        with smtplib.SMTP_SSL(host, port, context=ctx, timeout=60) as s:
+            s.login(user, os.environ["SMTP_PASSWORD"]); s.send_message(msg)
+    else:
+        with smtplib.SMTP(host, port, timeout=60) as s:
+            s.starttls(context=ctx); s.login(user, os.environ["SMTP_PASSWORD"]); s.send_message(msg)
+
+
+def alert_saved():
+    """tick 끝에 실행. 실패해도 수집 결과 반영은 계속. 계약 훑기 기록(nara-data)이 바뀌면 True."""
+    track_saved.contracts_changed = False
+    try:
+        events, extra = track_saved()
+    except Exception as e:  # noqa: BLE001 - saved_bids 테이블이 아직 없을 때 등
+        print(f"보관함 상태 확인 건너뜀: {e}", flush=True)
+        return False
+    if not events:
+        return track_saved.contracts_changed
+    rcpts = [r["email"] for r in sb("GET", "recipients?select=email&active=eq.true") or []]
+    try:
+        send_alert(rcpts, events, extra)
+        print(f"보관함 알림 메일 {len(events)}건 → {len(rcpts)}명", flush=True)
+    except Exception as e:  # noqa: BLE001
+        print(f"보관함 알림 메일 실패: {type(e).__name__}: {e}", flush=True)
+    return track_saved.contracts_changed
+
+
 def tick():
     now = now_kst()
     has_sb = bool(os.environ.get("SUPABASE_URL") and os.environ.get("SUPABASE_SERVICE_KEY"))
@@ -512,6 +952,8 @@ def tick():
                 if status == "sent":
                     sb("PATCH", f"schedules?id=eq.{s['id']}", {"last_sent_on": now.date().isoformat()})
             print(f"일정 '{s['name']}': {status} {detail}")
+    if has_sb and alert_saved():
+        changed = True
     # GitHub Actions 다음 단계에서 사이트 반영 여부 판단
     if os.environ.get("GITHUB_OUTPUT"):
         with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
@@ -521,7 +963,7 @@ def tick():
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["tick", "update-site", "rebuild", "excel", "send-test"])
+    ap.add_argument("cmd", choices=["tick", "update-site", "rebuild", "excel", "send-test", "track-saved"])
     ap.add_argument("--date", help="YYYYMMDD (기본: 어제)")
     ap.add_argument("--days-back", type=int, default=3)
     ap.add_argument("--to", action="append")
@@ -533,6 +975,8 @@ def main():
         update_site(a.days_back)
     elif a.cmd == "rebuild":
         rebuild_index(load_cfg())
+    elif a.cmd == "track-saved":
+        alert_saved()
     elif a.cmd == "excel":
         print(build_excel(day)[0])
     else:

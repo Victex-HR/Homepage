@@ -160,6 +160,29 @@ footer { color: var(--muted); font-size: 12.5px; }
 .budget { display: inline-flex; gap: 6px; align-items: center; font-size: 14px; color: var(--muted); }
 .budget input { width: 110px; font-family: var(--mono); }
 .filters select.on, .budget input.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.tl { margin: 4px 0 14px; width: 0; min-width: 100%; }
+.tl-legend { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; font-size: 12px; }
+.tl-legend span { padding: 2px 8px; border-radius: 4px; background: var(--muted); color: var(--surface); }
+.tl-legend span.on { background: var(--accent); }
+.tl-legend small { color: var(--muted); margin-left: 6px; }
+.tl-row { display: flex; align-items: center; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+.tl-card { flex: 1 0 104px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); overflow: hidden; }
+.tl-h { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; font-weight: 700; font-size: 13px; background: var(--muted); color: var(--surface); }
+.tl-card.on { border-color: var(--accent); }
+.tl-card.on .tl-h { background: var(--accent); }
+.tl-n { background: var(--danger); color: #fff; border-radius: 999px; min-width: 18px; height: 18px; font-size: 11px; display: grid; place-items: center; padding: 0 5px; }
+.tl-f { padding: 5px 8px; font-size: 12px; border-top: 1px dashed var(--line); }
+.tl-f:first-of-type { border-top: 0; }
+.tl-f span { display: block; color: var(--fg); }
+.tl-f em { font-style: normal; font-family: var(--mono); color: var(--muted); word-break: break-all; }
+.tl-arr { flex: 0 0 auto; font-style: normal; width: 18px; height: 18px; border-radius: 50%; background: var(--muted); color: var(--surface); display: grid; place-items: center; font-size: 13px; }
+.tl-t { margin: 12px 0 6px; font-size: 13px; }
+.tl-bd { width: 100%; border-collapse: collapse; font-size: 12px; }
+.tl-bd th, .tl-bd td { padding: 5px 8px; border-bottom: 1px solid var(--line); text-align: left; }
+.tl-bd .n { text-align: right; font-family: var(--mono); }
+.tl-note { margin: 0; font-size: 12px; color: var(--muted); }
+.chip.st { background: var(--chip); color: var(--fg); font-weight: 600; }
+.chip.st.new, .tab .n.new { background: var(--warn-soft); color: var(--warn); padding: 1px 6px; border-radius: 999px; }
 .chip.pre { background: var(--accent-soft); color: var(--accent); border-color: transparent; font-weight: 600; }
 td.m { font-size: 12.5px; color: var(--muted); white-space: nowrap; }
 td.t { white-space: nowrap; font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
@@ -471,24 +494,85 @@ function renderStats() {
     [recBid.toLocaleString(), "추천 기준 통과 (입찰)", "rec"],
     [recPre.toLocaleString(), "추천 기준 통과 (사전규격)", "rec"],
     [hot, "3일 안에 마감되는 추천", "hot"],
-    [Object.keys(SAVED).length.toLocaleString(), "보관 중 (내가 보관한 공고)", ""],
+    [Object.keys(SAVED).length.toLocaleString(), SAVED_SB ? "보관 중 (보관함, 함께 씀)" : "보관 중 (내가 보관한 공고)", ""],
   ].map(([v, l, c]) => `<div class="stat ${c && "is-" + c}"><b>${v}</b><span>${l}</span></div>`).join("");
   const by = {}; ROWS.forEach(b => { const k = b.bsnsDivNm || "기타"; by[k] = (by[k] || 0) + 1; });
   $("#typesum").innerHTML = Object.entries(by).sort((a, b) => b[1] - a[1]).map(([k, v]) =>
     `<span><i class="sw" style="background:${TYPE_COLOR[k] || "var(--muted)"}"></i>${esc(k)} <b>${v.toLocaleString()}</b></span>`).join("");
 }
 
-/* ---------- 보관함 (이 브라우저에 저장) ---------- */
+/* ---------- 보관함 ----------
+   Supabase 가 연결돼 있으면 보관함을 서버(saved_bids)에 두어 모두가 함께 쓰고, 수집 봇이 상태 변화를 찾아 알린다.
+   연결이 없으면 예전처럼 이 브라우저에만 저장한다. */
 const keyOf = b => (b.pre ? "P:" : "B:") + b.bidNtceNo + "-" + b.bidNtceOrd;
-let SAVED = {};
+let SAVED = {}, SAVED_SB = false, SEEN = {};
 try { SAVED = JSON.parse(localStorage.getItem("naraSaved") || "{}"); } catch (e) {}
+try { SEEN = JSON.parse(localStorage.getItem("naraSeen") || "{}"); } catch (e) {}
 const isSaved = b => !!SAVED[keyOf(b)];
-function toggleSave(b) {
-  const k = keyOf(b);
-  if (SAVED[k]) delete SAVED[k];
-  else { const { why, groups, score, open, ...rest } = b; SAVED[k] = { ...rest, savedAt: new Date().toISOString() }; }
-  try { localStorage.setItem("naraSaved", JSON.stringify(SAVED)); } catch (e) { toast("이 브라우저에서는 보관을 저장할 수 없습니다."); }
-  renderStats(); renderTabs();
+const saveLocal = () => { try { localStorage.setItem("naraSaved", JSON.stringify(SAVED)); } catch (e) { if (!SAVED_SB) toast("이 브라우저에서는 보관을 저장할 수 없습니다."); } };
+const slimSaved = b => { const { why, groups, score, open, st, tl, ...rest } = b; return rest; };
+// 진행 단계 (나라장터 '진행사항' 순서). 수집 봇이 만든 timeline 이 없으면 공고 내용으로 아는 만큼만 채운다.
+function steps(b) {
+  if (b.tl?.steps) return b.tl.steps;
+  const passed = b.opengDate && new Date(`${b.opengDate}T${b.opengTm || "00:00"}:00+09:00`) <= new Date();
+  const no = b.pre ? "" : b.bidNtceNo;
+  return [
+    { name: "발주계획", f: [["발주계획번호"], ["발주일자"]] }, { name: "요청접수", f: [["요청접수번호"], ["접수처리일자"]] },
+    { name: "사전규격", done: !!b.pre, f: [["사전규격번호", b.pre ? b.bidNtceNo : ""], ["규격공개일자", b.pre ? b.bidNtceDate : ""]] },
+    { name: "입찰공고", done: !b.pre, n: b.pre ? 0 : 1, f: [["입찰공고번호", no], ["공고게시일자", b.pre ? "" : b.bidNtceDate]] },
+    { name: "개찰", done: !!passed, n: passed ? 1 : 0, f: [["입찰공고번호", no], ["개찰일자", b.pre ? "" : b.opengDate]] },
+    { name: "계약", f: [["계약번호"], ["최초계약일자"]] }, { name: "검사검수", f: [["통합검수번호"], ["검수일자"]] },
+    { name: "대금지급", f: [["통합지급번호"], ["지급요청일자"]] }];
+}
+function timelineHtml(b) {
+  const st = steps(b), bd = b.tl?.bidders || [];
+  const cards = st.map((s, i) => `${i ? `<i class="tl-arr" aria-hidden="true">›</i>` : ""}<div class="tl-card ${s.done ? "on" : ""}">
+      <div class="tl-h">${esc(s.name)}${s.n > 1 ? `<b class="tl-n">${s.n}</b>` : ""}</div>
+      ${s.f.map(([k, v]) => `<div class="tl-f"><span>${esc(k)}</span><em>${esc(v || "없음")}</em></div>`).join("")}</div>`).join("");
+  const table = bd.length ? `<table class="tl-bd"><thead><tr><th>순위</th><th>업체명</th><th>대표</th><th class="n">투찰금액</th><th class="n">투찰률(%)</th><th>비고</th></tr></thead><tbody>${
+    bd.map(r => `<tr><td>${esc(r.rank)}</td><td>${esc(r.name)}</td><td>${esc(r.ceo)}</td><td class="n">${r.amt ? Number(r.amt).toLocaleString() : ""}</td><td class="n">${esc(r.rate)}</td><td>${esc(r.note)}</td></tr>`).join("")}</tbody></table>`
+    : `<p class="tl-note">${st[4]?.done ? "입찰 참여 업체는 낙찰정보서비스 연결 뒤에 보입니다." : "입찰 참여 업체는 개찰 뒤에 보입니다."}</p>`;
+  return `<div class="tl"><div class="tl-legend"><span class="on">진행</span><span>미진행</span>${b.tl?.at ? `<small>${esc(b.tl.at.slice(0, 16).replace("T", " "))} 확인</small>` : ""}</div>
+    <div class="tl-row">${cards}</div><h4 class="tl-t">입찰 참여 업체${bd.length ? ` ${bd.length}곳` : ""}</h4>${table}</div>`;
+}
+const isNew = b => b.st?.at && SEEN[keyOf(b)] !== b.st.at;
+async function loadSaved() {
+  let rows;
+  try { rows = await sbRest("saved_bids?select=key,item,stage,stage_note,stage_at,timeline,created_at&order=created_at.desc"); } catch (e) { return; }
+  if (!rows) return;
+  const local = SAVED, server = {};
+  for (const r of rows) server[r.key] = { ...r.item, savedAt: r.created_at, tl: r.timeline, st: r.stage ? { stage: r.stage, note: r.stage_note, at: r.stage_at } : null };
+  // 이 브라우저에만 있던 보관 공고는 서버로 옮긴다
+  const move = Object.entries(local).filter(([k]) => !server[k]);
+  if (move.length) {
+    try {
+      await sbRest("saved_bids?on_conflict=key", { method: "POST", prefer: "resolution=ignore-duplicates,return=minimal",
+        body: JSON.stringify(move.map(([k, b]) => ({ key: k, kind: b.pre ? "pre" : "bid", item: slimSaved(b) }))) });
+      move.forEach(([k, b]) => server[k] = b);
+    } catch (e) { return; }
+  }
+  SAVED = server; SAVED_SB = true; saveLocal();
+}
+async function toggleSave(b) {
+  const k = keyOf(b), had = !!SAVED[k];
+  if (had) delete SAVED[k];
+  else SAVED[k] = { ...slimSaved(b), savedAt: new Date().toISOString() };
+  saveLocal(); renderStats(); renderTabs();
+  if (!SAVED_SB) return;
+  try {
+    if (had) await sbRest(`saved_bids?key=eq.${encodeURIComponent(k)}`, { method: "DELETE", prefer: "return=minimal" });
+    else await sbRest("saved_bids?on_conflict=key", { method: "POST", prefer: "resolution=ignore-duplicates,return=minimal",
+      body: JSON.stringify({ key: k, kind: b.pre ? "pre" : "bid", item: slimSaved(b) }) });
+  } catch (e) {
+    if (had) SAVED[k] = b; else delete SAVED[k];
+    saveLocal(); renderStats(); renderTabs(); if (VIEW === "saved") renderTable();
+    toast("보관함을 저장하지 못했습니다. 잠시 뒤 다시 눌러 주세요.");
+  }
+}
+const stChip = b => b.st ? ` <span class="chip st${isNew(b) ? " new" : ""}" title="${esc((b.st.note || "") + " · " + (b.st.at || "").slice(0, 16).replace("T", " "))}">${isNew(b) ? "변경 · " : ""}${esc(b.st.stage)}</span>` : "";
+function markSeen() {
+  let n = 0; for (const b of Object.values(SAVED)) if (isNew(b)) { SEEN[keyOf(b)] = b.st.at; n++; }
+  if (n) { try { localStorage.setItem("naraSeen", JSON.stringify(SEEN)); } catch (e) {} }
 }
 const starBtn = b => `<button class="star ${isSaved(b) ? "on" : ""}" type="button" data-k="${esc(keyOf(b))}" title="${isSaved(b) ? "보관 해제" : "보관"}" aria-label="보관">${isSaved(b) ? "★" : "☆"}</button>`;
 function savedRows() {   // 보관한 공고는 기간과 상관없이 보여 주고, 점수는 지금 기준으로 다시 매김
@@ -499,8 +583,10 @@ const viewRows = () => VIEW === "saved" ? savedRows() : VIEW === "bid" ? ROWS.fi
 function renderTabs() {
   const n = { list: ROWS.length, rec: RECS.length, bid: ROWS.filter(b => !b.pre).length, pre: ROWS.filter(b => b.pre).length, saved: Object.keys(SAVED).length };
   for (const [id, v] of Object.entries(n)) {
-    const t = $("#tab-" + id); t.querySelector(".n")?.remove(); t.insertAdjacentHTML("beforeend", `<span class="n">${v.toLocaleString()}</span>`);
+    const t = $("#tab-" + id); t.querySelectorAll(".n").forEach(x => x.remove()); t.insertAdjacentHTML("beforeend", `<span class="n">${v.toLocaleString()}</span>`);
   }
+  const ch = Object.values(SAVED).filter(isNew).length;
+  if (ch) $("#tab-saved").insertAdjacentHTML("beforeend", `<span class="n new" title="상태가 바뀐 보관 공고">변경 ${ch}</span>`);
 }
 function onStar(e) {
   const btn = e.target.closest(".star"); if (!btn) return false;
@@ -528,7 +614,7 @@ function renderTable() {
       <td>${starBtn(b)}</td>
       <td>${b.score != null ? `<span class="sc">${b.score}</span>` : ""}</td>
       <td class="t">${esc((b.bidNtceDate || "").slice(5))} ${esc(b.bidNtceBgn)}</td>
-      <td>${esc(b.bidNtceNm)}${b.bidNtceSttusNm && b.bidNtceSttusNm !== "일반공고" ? ` <span class="chip">${esc(b.bidNtceSttusNm)}</span>` : ""}</td>
+      <td>${esc(b.bidNtceNm)}${b.bidNtceSttusNm && b.bidNtceSttusNm !== "일반공고" ? ` <span class="chip">${esc(b.bidNtceSttusNm)}</span>` : ""}${VIEW === "saved" ? stChip(b) : ""}</td>
       <td style="white-space:nowrap">${b.pre ? `<span class="chip pre">사전규격</span><br>` : ""}${esc(b.bsnsDivNm)}</td>
       <td>${esc(b.ntceInsttNm)}</td>
       <td class="n">${won(b.asignBdgtAmt)}</td>
@@ -555,7 +641,8 @@ function onRowClick(e) {
     ["개찰", `${b.opengDate} ${b.opengTm}`], ["지역제한", b.rgnLmtYn === "Y" ? (b.prtcptPsblRgnNm || "있음") : "없음"],
     ["업종제한", b.indstrytyLmtYn === "Y" ? (b.bidprcPsblIndstrytyNm || "있음") : "없음"],
     ["판정", (b.why || []).map(w => (w.g ? w.g + ": " : "") + w.t).join(" / ") || "기준에 맞는 키워드 없음"]];
-  tr.insertAdjacentHTML("afterend", `<tr class="detail"><td colspan="10"><dl class="dl">${f.map(([k, v]) =>
+  if (b.st) f.unshift(["보관함 상태", `${b.st.stage}${b.st.note ? " · " + b.st.note : ""} (${(b.st.at || "").slice(0, 16).replace("T", " ")})`]);
+  tr.insertAdjacentHTML("afterend", `<tr class="detail"><td colspan="10">${VIEW === "saved" ? timelineHtml(b) : ""}<dl class="dl">${f.map(([k, v]) =>
     `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl></td></tr>`);
 }
 
@@ -684,9 +771,10 @@ async function sbCfg() {
 }
 async function sbRest(path, opt = {}) {
   const c = await sbCfg(); if (!c) return null;
-  const r = await fetch(`${c.url}/rest/v1/${path}`, { ...opt, headers: { apikey: c.anon, Authorization: "Bearer " + c.anon, "Content-Type": "application/json" } });
+  const { prefer, ...rest } = opt;
+  const r = await fetch(`${c.url}/rest/v1/${path}`, { ...rest, headers: { apikey: c.anon, Authorization: "Bearer " + c.anon, "Content-Type": "application/json", ...(prefer ? { Prefer: prefer } : {}) } });
   if (!r.ok) throw new Error(r.status);
-  return r.json();
+  const t = await r.text(); return t ? JSON.parse(t) : true;
 }
 async function loadCollectTimes() {
   try { const rows = await sbRest("settings?select=value&key=eq.collect_times");
@@ -724,9 +812,10 @@ function setTab(name) {
   $("#p-rec").hidden = name !== "rec"; $("#p-list").hidden = name === "rec";
   if (name !== "rec") { VIEW = $("#tab-" + name).dataset.view; shown = PAGE; $$("tr.detail").forEach(x => x.remove()); renderTable(); }
   $("#avail").style.opacity = name === "saved" ? .4 : 1;
+  if (name === "saved") { markSeen(); renderTabs(); }   // 이번에 보여 준 '변경' 표시는 다음부터 지움
 }
 async function init() {
-  await loadCollectTimes();
+  await Promise.all([loadCollectTimes(), loadSaved()]);
   try { await loadMeta(); }
   catch (e) {
     $("#gen").textContent = "";
