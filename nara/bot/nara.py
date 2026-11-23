@@ -655,6 +655,75 @@ class Tracker:
                 return stage, f"사전규격 {pre_no} · {note}"
         return self.bid_stage(no, item)
 
+    # ---- 진행 단계 이력 (나라장터 '진행사항'과 같은 순서) ----
+    def group_of(self, row):
+        """(사전규격번호, 같은 사전규격번호의 입찰공고번호들)."""
+        item, kind = row["item"], row["item"].get("bsnsDivNm")
+        if row["kind"] == "pre":
+            pre_no = item.get("bidNtceNo")
+            return pre_no, self.pre_links(pre_no, kind)
+        no = item.get("bidNtceNo")
+        pre_no = self.pre_of.get(no)
+        nos = self.pre_links(pre_no, kind) if pre_no else []
+        return pre_no, nos if no in nos else [no] + nos
+
+    def bidders(self, no, kind):
+        """개찰 참여 업체 (낙찰정보서비스 개찰완료 목록). 못 부르면 []."""
+        if kind not in OPEN_OPS or not self.open_api:
+            return []
+        try:
+            items = api_items(OPEN_URL + "getOpengResultListInfoOpengCompt", {"bidNtceNo": no, "bidNtceOrd": "000"})
+        except PermissionError as e:
+            self.open_api, self.open_api_msg = False, f"개찰·낙찰 결과는 낙찰정보서비스 활용신청 뒤에 확인됩니다 ({e})"
+            return []
+        except RuntimeError as e:
+            print(f"개찰 업체 조회 실패 {no}: {e}", flush=True)
+            return []
+        out = []
+        for x in items:
+            out.append({"rank": str(x.get("opengRank") or ""), "name": str(x.get("prcbdrNm") or ""),
+                        "ceo": str(x.get("prcbdrCeoNm") or ""), "amt": nb.to_int(x.get("bidprcAmt")) or None,
+                        "rate": str(x.get("bidprcrt") or ""), "note": str(x.get("rmrk") or "")})
+        out.sort(key=lambda r: int(r["rank"]) if r["rank"].isdigit() else 9999)
+        return out[:100]
+
+    def timeline(self, row):
+        """보관 공고 한 건의 단계 카드 목록과 개찰 참여 업체."""
+        kind = row["item"].get("bsnsDivNm")
+        pre_no, nos = self.group_of(row)
+        pre = self.pres.get(pre_no) or (row["item"] if row["kind"] == "pre" else {})
+        bids = []
+        for no in nos:
+            rows = self.bids.get(no) or {}
+            b = {}
+            for o in sorted(rows):
+                b.update({k: v for k, v in rows[o].items() if v not in (None, "")})
+            if not b and no == row["item"].get("bidNtceNo") and row["kind"] == "bid":
+                b = row["item"]
+            bids.append((no, b))
+        posted = [(no, b) for no, b in bids if b.get("bidNtceDate")] or bids
+        opened = [(no, b) for no, b in bids if at_kst(b.get("opengDate"), b.get("opengTm")) and
+                  self.now >= at_kst(b.get("opengDate"), b.get("opengTm"))]
+        need = lambda svc: {"need": svc}
+        first = lambda lst, k: (lst[-1][1].get(k) if lst else "") or ""
+        steps = [
+            {"name": "발주계획", "done": False, "f": [["발주계획번호", ""], ["발주일자", ""]], **need("발주계획현황서비스")},
+            {"name": "요청접수", "done": False, "f": [["요청접수번호", ""], ["접수처리일자", ""]]},
+            {"name": "사전규격", "done": bool(pre_no), "f": [["사전규격번호", pre_no or ""], ["규격공개일자", pre.get("bidNtceDate") or ""]]},
+            {"name": "입찰공고", "done": bool(posted and posted[-1][0]), "n": len(nos),
+             "f": [["입찰공고번호", posted[-1][0] if posted else ""], ["공고게시일자", first(posted, "bidNtceDate")]]},
+            {"name": "개찰", "done": bool(opened), "n": len(opened),
+             "f": [["입찰공고번호", opened[-1][0] if opened else (posted[-1][0] if posted else "")],
+                   ["개찰일자", first(opened, "opengDate") or first(posted, "opengDate")]]},
+            {"name": "계약", "done": False, "f": [["계약번호", ""], ["최초계약일자", ""]], **need("계약정보서비스")},
+            {"name": "검사검수", "done": False, "f": [["통합검수번호", ""], ["검수일자", ""]]},
+            {"name": "대금지급", "done": False, "f": [["통합지급번호", ""], ["지급요청일자", ""]]},
+        ]
+        bidders = []
+        for no, b in opened[-1:]:
+            bidders = self.bidders(no, b.get("bsnsDivNm") or kind)
+        return {"steps": steps, "bidders": bidders, "at": self.now.isoformat(timespec="minutes")}
+
     def stage(self, row):
         item = row["item"]
         if row["kind"] == "pre":
@@ -664,7 +733,7 @@ class Tracker:
 
 def track_saved():
     """보관함 공고의 상태를 확인. 바뀐 것은 기록하고 [(공고, 이전, 새 상태, 설명)] 반환."""
-    rows = sb("GET", "saved_bids?select=key,kind,item,stage,history") or []
+    rows = sb("GET", "saved_bids?select=key,kind,item,stage,history,timeline") or []
     if not rows:
         return [], ""
     t, events = Tracker(), []
@@ -674,6 +743,13 @@ def track_saved():
         except Exception as e:  # noqa: BLE001 - 한 건 문제로 나머지를 멈추지 않음
             print(f"보관 공고 {r['key']} 확인 실패: {e}", flush=True)
             continue
+        try:        # 진행 단계 카드 (보관함에서 공고를 누르면 보임)
+            tl = t.timeline(r)
+            old = r.get("timeline") or {}
+            if (old.get("steps"), old.get("bidders")) != (tl["steps"], tl["bidders"]):
+                sb("PATCH", f"saved_bids?key=eq.{urllib.parse.quote(r['key'])}", {"timeline": tl})
+        except Exception as e:  # noqa: BLE001
+            print(f"보관 공고 {r['key']} 이력 만들기 실패: {e}", flush=True)
         if stage == r.get("stage"):
             continue
         at = t.now.isoformat(timespec="seconds")

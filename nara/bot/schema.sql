@@ -119,12 +119,13 @@ create table if not exists public.saved_bids (
   history jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default now()
 );
+alter table public.saved_bids add column if not exists timeline jsonb;   -- 진행 단계 카드·개찰 참여 업체 (봇이 씀)
 alter table public.saved_bids enable row level security;
 drop policy if exists "saved read" on public.saved_bids;
 create policy "saved read" on public.saved_bids for select using (true);
 drop policy if exists "saved add" on public.saved_bids;
 create policy "saved add" on public.saved_bids for insert
-  with check (stage is null and stage_note is null and stage_at is null and history = '[]'::jsonb);
+  with check (stage is null and stage_note is null and stage_at is null and history = '[]'::jsonb and timeline is null);
 drop policy if exists "saved remove" on public.saved_bids;
 create policy "saved remove" on public.saved_bids for delete using (true);
 -- 상태(stage) 변경은 수집 봇(service_role)만 한다
