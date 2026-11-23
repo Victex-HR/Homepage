@@ -464,11 +464,21 @@ def fallback_due(now):
 
 # ---------------------------------------------------------------- 보관함 상태 알림
 # 공개 화면 보관함(Supabase saved_bids)의 공고마다 지금 상태를 정해, 바뀌었으면 기록하고 메일로 알린다.
-# 사전규격 → 본공고 등록 → 정정공고 → 입찰 마감 → 개찰 완료 / 유찰 / 취소공고
+# 사전규격 → 본공고 등록 → 정정공고 → 입찰 마감 → 개찰 완료 → 최종낙찰 (유찰·취소 뒤 재공고는 이어서 추적)
 OPEN_URL = "https://apis.data.go.kr/1230000/as/ScsbidInfoService/"
 OPEN_OPS = {"물품": "getOpengResultListInfoThng", "용역": "getOpengResultListInfoServc",
             "공사": "getOpengResultListInfoCnstwk", "외자": "getOpengResultListInfoFrgcpt"}
+WIN_OPS = {"물품": "getScsbidListSttusThng", "용역": "getScsbidListSttusServc",
+           "공사": "getScsbidListSttusCnstwk", "외자": "getScsbidListSttusFrgcpt"}
 PRE_OP_BY_KIND = {v: k for k, v in PRE_OPS.items()}
+
+
+def norm_title(t):
+    """재공고 찾기용 공고명: [재공고]·(긴급) 같은 머리말과 공백을 뺀다."""
+    import re
+    t = re.sub(r"^\s*(\[[^\]]*\]|\([^)]*\)|재공고|긴급)\s*", "", str(t or ""))
+    t = re.sub(r"^\s*(\[[^\]]*\]|\([^)]*\)|재공고|긴급)\s*", "", t)
+    return re.sub(r"\s+", "", t)
 
 
 def api_items(url, params):
@@ -521,55 +531,96 @@ class Tracker:
         self.open_api = True      # 낙찰정보서비스 활용신청 여부 (처음 거절되면 이번 실행에선 더 부르지 않음)
         self.open_api_msg = ""
 
-    def opening(self, no, kind):
-        """개찰 결과 (낙찰정보서비스). 없거나 못 부르면 None."""
-        op = OPEN_OPS.get(kind)
-        if not op or not self.open_api:
+    def call_open(self, ops, no):
+        """낙찰정보서비스 한 종류(개찰결과/최종낙찰) 조회. 못 부르면 None."""
+        if not self.open_api:
             return None
         try:
-            items = [x for x in api_items(OPEN_URL + op, {"inqryDiv": 4, "bidNtceNo": no}) if x.get("bidNtceNo") == no]
+            return [x for x in api_items(OPEN_URL + ops, {"inqryDiv": 4, "bidNtceNo": no}) if x.get("bidNtceNo") == no]
         except PermissionError as e:
-            self.open_api, self.open_api_msg = False, f"개찰 결과는 낙찰정보서비스 활용신청 뒤에 확인됩니다 ({e})"
+            self.open_api, self.open_api_msg = False, f"개찰·낙찰 결과는 낙찰정보서비스 활용신청 뒤에 확인됩니다 ({e})"
             print(self.open_api_msg, flush=True)
-            return None
         except RuntimeError as e:
             print(f"개찰 결과 조회 실패 {no}: {e}", flush=True)
+        return None
+
+    def opening(self, no, kind):
+        """개찰 결과와 최종낙찰. 한 공고가 여러 분류(분리 발주)로 나뉘면 분류마다 따로 본다. 없으면 None."""
+        if kind not in OPEN_OPS:
             return None
+        items = self.call_open(OPEN_OPS[kind], no)
         if not items:
             return None
-        it = max(items, key=lambda x: str(x.get("bidNtceOrd") or ""))
-        prog = str(it.get("progrsDivCdNm") or it.get("opengRsltDivNm") or "")
-        first = str(it.get("opengCorpInfo") or "").split("^")
-        if "유찰" in prog:
-            return "유찰", prog
-        note = f"1순위 {first[0]}" if first and first[0] else ""
-        if len(first) > 3 and first[3]:
-            note += f" · 투찰 {nb.to_int(first[3]):,}원" if nb.to_int(first[3]) else ""
-        if it.get("prtcptCnum"):
-            note += f" · 참가 {it['prtcptCnum']}곳"
-        return "개찰 완료", note.strip(" ·") or prog
+        lots = {}
+        for x in items:     # 같은 분류는 최신 차수만
+            k = str(x.get("bidClsfcNo") or "0")
+            if k not in lots or str(x.get("bidNtceOrd") or "") > str(lots[k].get("bidNtceOrd") or ""):
+                lots[k] = x
+        wins = {str(x.get("bidClsfcNo") or "0"): x for x in self.call_open(WIN_OPS[kind], no) or []}
+        parts, stages = [], []
+        for k, it in sorted(lots.items()):
+            prog = str(it.get("progrsDivCdNm") or it.get("opengRsltDivNm") or "")
+            first = str(it.get("opengCorpInfo") or "").split("^")
+            w = wins.get(k)
+            if w and w.get("bidwinnrNm"):
+                st, nt = "최종낙찰", f"{w['bidwinnrNm']}" + (f" {nb.to_int(w.get('sucsfbidAmt')):,}원" if nb.to_int(w.get("sucsfbidAmt")) else "")
+            elif "유찰" in prog:
+                st, nt = "유찰", prog
+            else:
+                st = "개찰 완료"
+                nt = f"1순위 {first[0]}" if first and first[0] else prog
+                if it.get("prtcptCnum"):
+                    nt += f" · 참가 {it['prtcptCnum']}곳"
+            stages.append(st)
+            parts.append((f"{k}분류 " if len(lots) > 1 else "") + f"{st}: {nt}".rstrip(": "))
+        stage = stages[0] if len(set(stages)) == 1 else " / ".join(stages)
+        if len(lots) > 1:
+            stage = f"{stage} ({len(lots)}개 분류)"
+        return stage, " · ".join(parts)
 
-    def bid_stage(self, no, item):
+    def successor(self, b):
+        """유찰·취소된 공고와 이름·기관이 같고 더 늦게 나온 다른 공고(재공고)."""
+        key = (norm_title(b.get("bidNtceNm")), b.get("ntceInsttNm"))
+        if not key[0]:
+            return None
+        best = None
+        for no, rows in self.bids.items():
+            if no == b.get("bidNtceNo"):
+                continue
+            r = rows[max(rows)]
+            if (norm_title(r.get("bidNtceNm")), r.get("ntceInsttNm")) == key and \
+                    (r.get("bidNtceDate") or "") >= (b.get("bidNtceDate") or "") and (not best or r["bidNtceDate"] > best["bidNtceDate"]):
+                best = r
+        return best
+
+    def bid_stage(self, no, item, depth=0):
         rows = self.bids.get(no) or {}
         b = dict(item)
         for o in sorted(rows):      # 최신 차수 기준, 빈 칸은 앞 차수 값으로
             b.update({k: v for k, v in rows[o].items() if v not in (None, "")})
         ord_ = b.get("bidNtceOrd") or "000"
-        title = b.get("bidNtceNm") or ""
-        if "취소" in (b.get("bidNtceSttusNm") or ""):
-            return "취소공고", title
-        close = at_kst(b.get("bidClseDate"), b.get("bidClseTm"))
-        opening = at_kst(b.get("opengDate"), b.get("opengTm"))
-        if opening and self.now >= opening:
-            res = self.opening(no, b.get("bsnsDivNm"))
-            if res:
-                return res
         when = lambda label, d, t: f"{label} {d} {t or ''}".strip() if d else ""
-        if (close or opening) and self.now >= (close or opening):
-            return "입찰 마감", when("개찰", b.get("opengDate"), b.get("opengTm"))
-        if ord_ > "000" or (b.get("bidNtceSttusNm") or "") == "정정공고":
-            return f"정정공고 ({int(ord_)}차)", when("마감", b.get("bidClseDate"), b.get("bidClseTm"))
-        return "입찰공고", when("마감", b.get("bidClseDate"), b.get("bidClseTm"))
+        stage, note = None, ""
+        if "취소" in (b.get("bidNtceSttusNm") or ""):
+            stage, note = "취소공고", ""
+        else:
+            close = at_kst(b.get("bidClseDate"), b.get("bidClseTm"))
+            opening = at_kst(b.get("opengDate"), b.get("opengTm"))
+            res = self.opening(no, b.get("bsnsDivNm")) if opening and self.now >= opening else None
+            if res:
+                stage, note = res
+            elif (close or opening) and self.now >= (close or opening):
+                stage, note = "입찰 마감", when("개찰", b.get("opengDate"), b.get("opengTm"))
+            elif ord_ > "000" or (b.get("bidNtceSttusNm") or "") == "정정공고":
+                stage, note = f"정정공고 ({int(ord_)}차)", when("마감", b.get("bidClseDate"), b.get("bidClseTm"))
+            else:
+                stage, note = "입찰공고", when("마감", b.get("bidClseDate"), b.get("bidClseTm"))
+        if (stage == "취소공고" or stage.startswith("유찰")) and depth < 3:
+            nxt = self.successor(b)
+            if nxt:     # 재공고를 이어서 추적
+                s2, n2 = self.bid_stage(nxt["bidNtceNo"], nxt, depth + 1)
+                return f"재공고 · {s2}", f"{stage} 뒤 재공고 {nxt['bidNtceNo']}" + (f" · {n2}" if n2 else "")
+        return stage, note
 
     def pre_stage(self, item):
         no = item.get("bidNtceNo")
@@ -582,14 +633,26 @@ class Tracker:
                 links = next((str(x.get("bidNtceNoList")) for x in got if x.get("bidNtceNoList")), "")
             except (PermissionError, RuntimeError) as e:
                 print(f"사전규격 조회 실패 {no}: {e}", flush=True)
-        if links:
-            bno = links.split(",")[0].strip()
-            stage, note = self.bid_stage(bno, {"bidNtceNo": bno, "bidNtceOrd": "000", "bsnsDivNm": item.get("bsnsDivNm")})
-            if stage == "입찰공고":
-                stage = "본공고 등록"
-            if not self.bids.get(bno) and stage in ("본공고 등록", "입찰 마감"):
-                stage, note = "본공고 등록", ""
-            return stage, f"공고번호 {bno}" + (f" · {note}" if note else "")
+        nos = list(dict.fromkeys(x.strip() for x in links.split(",") if x.strip()))
+        if len(nos) > 1:    # 취소 뒤 재공고된 번호가 같이 들어 있으면 재공고 쪽만 본다
+            drop = set()
+            for bno in nos:
+                rows = self.bids.get(bno)
+                if rows and "취소" in (rows[max(rows)].get("bidNtceSttusNm") or ""):
+                    nxt = self.successor(rows[max(rows)])
+                    if nxt and nxt["bidNtceNo"] in nos:
+                        drop.add(bno)
+            nos = [x for x in nos if x not in drop]
+        if nos:     # 사전규격 하나가 본공고 여러 건으로 나뉘면 각각 추적
+            got = []
+            for bno in nos:
+                st, nt = self.bid_stage(bno, {"bidNtceNo": bno, "bidNtceOrd": "000", "bsnsDivNm": item.get("bsnsDivNm")})
+                got.append(("본공고 등록" if st == "입찰공고" else st, f"{bno}" + (f" {nt}" if nt else "")))
+            if len(got) == 1:
+                return got[0][0], f"공고번호 {got[0][1]}"
+            stages = [g[0] for g in got]
+            stage = stages[0] if len(set(stages)) == 1 else " / ".join(stages)
+            return f"본공고 {len(got)}건 · {stage}", " · ".join(g[1] for g in got)
         close = at_kst(cur.get("bidClseDate"), cur.get("bidClseTm"))
         if close and self.now >= close:
             return "사전규격 의견 마감", "본공고 기다리는 중"
