@@ -471,12 +471,16 @@ OPEN_OPS = {"물품": "getOpengResultListInfoThng", "용역": "getOpengResultLis
             "공사": "getOpengResultListInfoCnstwk", "외자": "getOpengResultListInfoFrgcpt"}
 WIN_OPS = {"물품": "getScsbidListSttusThng", "용역": "getScsbidListSttusServc",
            "공사": "getScsbidListSttusCnstwk", "외자": "getScsbidListSttusFrgcpt"}
+CNTRCT_URL = "https://apis.data.go.kr/1230000/ao/CntrctInfoService/"
+CNTRCT_OPS = {"물품": "getCntrctInfoListThng", "용역": "getCntrctInfoListServc",
+              "공사": "getCntrctInfoListCnstwk", "외자": "getCntrctInfoListFrgcpt"}
+CNTRCT_STATE = os.path.join(DATA, "contract-scan.json")   # 계약 등록 목록을 어디까지 훑었는지 + 보관 공고와 맞는 계약
 PRE_OP_BY_KIND = {v: k for k, v in PRE_OPS.items()}
 
 
 
-def api_items(url, params):
-    """공공데이터포털 목록 API 한 쪽. 활용신청이 안 된 키면 PermissionError."""
+def api_items(url, params, total=False):
+    """공공데이터포털 목록 API 한 쪽. 활용신청이 안 된 키면 PermissionError. total=True 면 (목록, 전체 건수)."""
     q = urllib.parse.urlencode({"ServiceKey": os.environ.get("NARA_API_KEY"), "numOfRows": 20, "pageNo": 1,
                                 "type": "json", **params})
     for attempt in range(4):
@@ -499,10 +503,15 @@ def api_items(url, params):
     if "OpenAPI_ServiceResponse" in data:
         h = data["OpenAPI_ServiceResponse"].get("cmmMsgHeader", {})
         raise PermissionError(h.get("returnAuthMsg") or h.get("errMsg"))
-    items = data.get("response", data).get("body", {}).get("items") or []
+    if "nkoneps.com.response.ResponseError" in data:
+        h = data["nkoneps.com.response.ResponseError"].get("header", {})
+        raise RuntimeError(f"API 오류 {h.get('resultCode')}: {h.get('resultMsg')}")
+    body = data.get("response", data).get("body", {})
+    items = body.get("items") or []
     if isinstance(items, dict):
         items = items.get("item", [])
-    return [items] if isinstance(items, dict) else items
+    items = [items] if isinstance(items, dict) else items
+    return (items, int(body.get("totalCount") or 0)) if total else items
 
 
 def at_kst(d, t):
@@ -528,13 +537,23 @@ class Tracker:
                         self.pre_of[bno.strip()] = r["bidNtceNo"]
         self.open_api = True      # 낙찰정보서비스 활용신청 여부 (처음 거절되면 이번 실행에선 더 부르지 않음)
         self.open_api_msg = ""
+        self.open_cache = {}
+        try:
+            self.cstate = json.load(open(CNTRCT_STATE, encoding="utf-8"))
+        except (OSError, ValueError):
+            self.cstate = {}
+        self.cstate.setdefault("hits", {})
 
     def call_open(self, ops, no):
         """낙찰정보서비스 한 종류(개찰결과/최종낙찰) 조회. 못 부르면 None."""
         if not self.open_api:
             return None
+        if (ops, no) in self.open_cache:
+            return self.open_cache[(ops, no)]
         try:
-            return [x for x in api_items(OPEN_URL + ops, {"inqryDiv": 4, "bidNtceNo": no}) if x.get("bidNtceNo") == no]
+            got = [x for x in api_items(OPEN_URL + ops, {"inqryDiv": 4, "bidNtceNo": no}) if x.get("bidNtceNo") == no]
+            self.open_cache[(ops, no)] = got
+            return got
         except PermissionError as e:
             self.open_api, self.open_api_msg = False, f"개찰·낙찰 결과는 낙찰정보서비스 활용신청 뒤에 확인됩니다 ({e})"
             print(self.open_api_msg, flush=True)
@@ -563,7 +582,7 @@ class Tracker:
             if w and w.get("bidwinnrNm"):
                 st, nt = "최종낙찰", f"{w['bidwinnrNm']}" + (f" {nb.to_int(w.get('sucsfbidAmt')):,}원" if nb.to_int(w.get("sucsfbidAmt")) else "")
             elif "유찰" in prog:
-                st, nt = "유찰", prog
+                st, nt = "유찰", str(it.get("opengRsltNtcCntnts") or "") or prog
             else:
                 st = "개찰 완료"
                 nt = f"1순위 {first[0]}" if first and first[0] else prog
@@ -585,6 +604,9 @@ class Tracker:
         when = lambda label, d, t: f"{label} {d} {t or ''}".strip() if d else ""
         if "취소" in (b.get("bidNtceSttusNm") or ""):
             return "취소공고", ""
+        c = self.cstate["hits"].get(no)
+        if c:
+            return "계약 체결", " ".join(x for x in (c.get("corp"), c.get("date")) if x)
         close = at_kst(b.get("bidClseDate"), b.get("bidClseTm"))
         opening = at_kst(b.get("opengDate"), b.get("opengTm"))
         res = self.opening(no, b.get("bsnsDivNm")) if opening and self.now >= opening else None
@@ -668,24 +690,69 @@ class Tracker:
         return pre_no, nos if no in nos else [no] + nos
 
     def bidders(self, no, kind):
-        """개찰 참여 업체 (낙찰정보서비스 개찰완료 목록). 못 부르면 []."""
-        if kind not in OPEN_OPS or not self.open_api:
+        """개찰 참여 업체 (낙찰정보서비스 개찰완료 목록, 첫 분류). 못 부르면 []."""
+        if kind not in OPEN_OPS:
             return []
+        res = self.call_open(OPEN_OPS[kind], no) or []
+        if not res:
+            return []
+        it = max(res, key=lambda x: (str(x.get("bidNtceOrd") or ""), str(x.get("rbidNo") or "")))
         try:
-            items = api_items(OPEN_URL + "getOpengResultListInfoOpengCompt", {"bidNtceNo": no, "bidNtceOrd": "000"})
-        except PermissionError as e:
-            self.open_api, self.open_api_msg = False, f"개찰·낙찰 결과는 낙찰정보서비스 활용신청 뒤에 확인됩니다 ({e})"
-            return []
-        except RuntimeError as e:
+            items = api_items(OPEN_URL + "getOpengResultListInfoOpengCompt",
+                              {"bidNtceNo": no, "bidNtceOrd": it.get("bidNtceOrd") or "000", "bidClsfcNo": it.get("bidClsfcNo") or "0",
+                               "rbidNo": it.get("rbidNo") or "000", "numOfRows": 100})
+        except (PermissionError, RuntimeError) as e:
             print(f"개찰 업체 조회 실패 {no}: {e}", flush=True)
             return []
-        out = []
-        for x in items:
-            out.append({"rank": str(x.get("opengRank") or ""), "name": str(x.get("prcbdrNm") or ""),
-                        "ceo": str(x.get("prcbdrCeoNm") or ""), "amt": nb.to_int(x.get("bidprcAmt")) or None,
-                        "rate": str(x.get("bidprcrt") or ""), "note": str(x.get("rmrk") or "")})
+        out = [{"rank": str(x.get("opengRank") or ""), "name": str(x.get("prcbdrNm") or ""), "ceo": str(x.get("prcbdrCeoNm") or ""),
+                "amt": nb.to_int(x.get("bidprcAmt")) or None, "rate": str(x.get("bidprcrt") or ""), "note": str(x.get("rmrk") or "")}
+               for x in items]
         out.sort(key=lambda r: int(r["rank"]) if r["rank"].isdigit() else 9999)
         return out[:100]
+
+    def scan_contracts(self, wanted):
+        """지난번 이후 등록된 계약 목록을 훑어 wanted(입찰공고번호) 와 맞는 계약을 모은다. 상태가 바뀌면 True."""
+        if not wanted:
+            return False
+        now = self.now
+        last = self.cstate.get("last")
+        start = dt.datetime.strptime(last, "%Y%m%d%H%M").replace(tzinfo=KST) if last else now - dt.timedelta(days=7)
+        start = max(start, now - dt.timedelta(days=7))      # 한 번에 최대 7일
+        changed = False
+        wins, a = [], start      # 조회 기간은 하루 단위로 (길게 주면 '입력범위값 초과')
+        while a < now:
+            b = min(dt.datetime.combine(a.date(), dt.time(23, 59), KST), now)
+            wins.append((a, b))
+            a = dt.datetime.combine(a.date() + dt.timedelta(days=1), dt.time(0, 0), KST)
+        try:
+            for (wa, wb), (kind, op) in ((w, k) for w in wins for k in CNTRCT_OPS.items()):
+                page, seen = 1, 0
+                while True:
+                    items, total = api_items(CNTRCT_URL + op, {"inqryDiv": 1, "inqryBgnDt": f"{wa:%Y%m%d%H%M}",
+                                                                "inqryEndDt": f"{wb:%Y%m%d%H%M}", "numOfRows": 999, "pageNo": page}, total=True)
+                    for c in items:
+                        no = str(c.get("ntceNo") or "")
+                        prev = self.cstate["hits"].get(no)
+                        if no in wanted and not (prev and (prev.get("date") or "9") <= (c.get("cntrctDate") or "9")):    # 최초 계약만
+                            corp = str(c.get("corpList") or "").strip("[]").split("^")
+                            self.cstate["hits"][no] = {"no": c.get("untyCntrctNo"), "date": c.get("cntrctDate") or c.get("cntrctCnclsDate"),
+                                                       "req": c.get("reqNo"), "corp": corp[3] if len(corp) > 3 else "",
+                                                       "amt": nb.to_int(c.get("totCntrctAmt")) or None, "url": c.get("cntrctDtlInfoUrl")}
+                            changed = True
+                    seen += len(items)
+                    if not items or seen >= total or page >= 30:
+                        break
+                    page += 1
+        except PermissionError as e:
+            print(f"계약 목록: 계약정보서비스 활용신청이 필요합니다 ({e})", flush=True)
+            return changed
+        except RuntimeError as e:
+            print(f"계약 목록 조회 실패: {e}", flush=True)
+            return changed
+        self.cstate["last"] = f"{now:%Y%m%d%H%M}"
+        self.cstate["hits"] = {k: v for k, v in self.cstate["hits"].items() if k in wanted}
+        json.dump(self.cstate, open(CNTRCT_STATE, "w", encoding="utf-8"), ensure_ascii=False)
+        return True
 
     def timeline(self, row):
         """보관 공고 한 건의 단계 카드 목록과 개찰 참여 업체."""
@@ -701,21 +768,24 @@ class Tracker:
             if not b and no == row["item"].get("bidNtceNo") and row["kind"] == "bid":
                 b = row["item"]
             bids.append((no, b))
+        bids.sort(key=lambda x: (x[1].get("bidNtceDate") or "", x[0]))
         posted = [(no, b) for no, b in bids if b.get("bidNtceDate")] or bids
         opened = [(no, b) for no, b in bids if at_kst(b.get("opengDate"), b.get("opengTm")) and
                   self.now >= at_kst(b.get("opengDate"), b.get("opengTm"))]
         need = lambda svc: {"need": svc}
         first = lambda lst, k: (lst[-1][1].get(k) if lst else "") or ""
+        hit = next((self.cstate["hits"][no] for no in nos[::-1] if no in self.cstate["hits"]), None)
         steps = [
             {"name": "발주계획", "done": False, "f": [["발주계획번호", ""], ["발주일자", ""]], **need("발주계획현황서비스")},
-            {"name": "요청접수", "done": False, "f": [["요청접수번호", ""], ["접수처리일자", ""]]},
+            {"name": "요청접수", "done": bool(hit and hit.get("req")), "f": [["요청접수번호", (hit or {}).get("req") or ""], ["접수처리일자", ""]]},
             {"name": "사전규격", "done": bool(pre_no), "f": [["사전규격번호", pre_no or ""], ["규격공개일자", pre.get("bidNtceDate") or ""]]},
             {"name": "입찰공고", "done": bool(posted and posted[-1][0]), "n": len(nos),
              "f": [["입찰공고번호", posted[-1][0] if posted else ""], ["공고게시일자", first(posted, "bidNtceDate")]]},
             {"name": "개찰", "done": bool(opened), "n": len(opened),
              "f": [["입찰공고번호", opened[-1][0] if opened else (posted[-1][0] if posted else "")],
                    ["개찰일자", first(opened, "opengDate") or first(posted, "opengDate")]]},
-            {"name": "계약", "done": False, "f": [["계약번호", ""], ["최초계약일자", ""]], **need("계약정보서비스")},
+            {"name": "계약", "done": bool(hit), "f": [["계약번호", (hit or {}).get("no") or ""], ["최초계약일자", (hit or {}).get("date") or ""]],
+             **({"corp": hit.get("corp"), "amt": hit.get("amt"), "url": hit.get("url")} if hit else {})},
             {"name": "검사검수", "done": False, "f": [["통합검수번호", ""], ["검수일자", ""]]},
             {"name": "대금지급", "done": False, "f": [["통합지급번호", ""], ["지급요청일자", ""]]},
         ]
@@ -737,6 +807,13 @@ def track_saved():
     if not rows:
         return [], ""
     t, events = Tracker(), []
+    wanted = set()
+    for r in rows:      # 계약은 입찰공고번호로 바로 찾을 수 없어 새로 등록된 계약 목록을 훑어 맞춰 본다
+        try:
+            wanted.update(t.group_of(r)[1])
+        except Exception as e:  # noqa: BLE001
+            print(f"보관 공고 {r['key']} 묶음 확인 실패: {e}", flush=True)
+    t.contracts_changed = t.scan_contracts(wanted)
     for r in rows:
         try:
             stage, note = t.stage(r)
@@ -759,6 +836,7 @@ def track_saved():
         if r.get("stage"):        # 처음 확인한 상태는 알리지 않고 기록만
             events.append((r["item"], r["stage"], stage, note))
     print(f"보관함 {len(rows)}건 확인, 상태 변경 {len(events)}건", flush=True)
+    track_saved.contracts_changed = t.contracts_changed
     return events, t.open_api_msg
 
 
@@ -804,20 +882,22 @@ def send_alert(to, events, extra=""):
 
 
 def alert_saved():
-    """tick 끝에 실행. 실패해도 수집 결과 반영은 계속."""
+    """tick 끝에 실행. 실패해도 수집 결과 반영은 계속. 계약 훑기 기록(nara-data)이 바뀌면 True."""
+    track_saved.contracts_changed = False
     try:
         events, extra = track_saved()
     except Exception as e:  # noqa: BLE001 - saved_bids 테이블이 아직 없을 때 등
         print(f"보관함 상태 확인 건너뜀: {e}", flush=True)
-        return
+        return False
     if not events:
-        return
+        return track_saved.contracts_changed
     rcpts = [r["email"] for r in sb("GET", "recipients?select=email&active=eq.true") or []]
     try:
         send_alert(rcpts, events, extra)
         print(f"보관함 알림 메일 {len(events)}건 → {len(rcpts)}명", flush=True)
     except Exception as e:  # noqa: BLE001
         print(f"보관함 알림 메일 실패: {type(e).__name__}: {e}", flush=True)
+    return track_saved.contracts_changed
 
 
 def tick():
@@ -872,8 +952,8 @@ def tick():
                 if status == "sent":
                     sb("PATCH", f"schedules?id=eq.{s['id']}", {"last_sent_on": now.date().isoformat()})
             print(f"일정 '{s['name']}': {status} {detail}")
-    if has_sb:
-        alert_saved()
+    if has_sb and alert_saved():
+        changed = True
     # GitHub Actions 다음 단계에서 사이트 반영 여부 판단
     if os.environ.get("GITHUB_OUTPUT"):
         with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
