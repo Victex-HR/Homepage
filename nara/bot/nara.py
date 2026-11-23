@@ -464,7 +464,8 @@ def fallback_due(now):
 
 # ---------------------------------------------------------------- 보관함 상태 알림
 # 공개 화면 보관함(Supabase saved_bids)의 공고마다 지금 상태를 정해, 바뀌었으면 기록하고 메일로 알린다.
-# 사전규격 → 본공고 등록 → 정정공고 → 입찰 마감 → 개찰 완료 → 최종낙찰 (유찰·취소 뒤 재공고는 이어서 추적)
+# 사전규격 → 본공고 등록 → 정정공고 → 입찰 마감 → 개찰 완료 → 최종낙찰
+# 같은 공고 판별은 사전규격번호로 한다 (나뉜 공고, 취소·유찰 뒤 재공고)
 OPEN_URL = "https://apis.data.go.kr/1230000/as/ScsbidInfoService/"
 OPEN_OPS = {"물품": "getOpengResultListInfoThng", "용역": "getOpengResultListInfoServc",
             "공사": "getOpengResultListInfoCnstwk", "외자": "getOpengResultListInfoFrgcpt"}
@@ -472,13 +473,6 @@ WIN_OPS = {"물품": "getScsbidListSttusThng", "용역": "getScsbidListSttusServ
            "공사": "getScsbidListSttusCnstwk", "외자": "getScsbidListSttusFrgcpt"}
 PRE_OP_BY_KIND = {v: k for k, v in PRE_OPS.items()}
 
-
-def norm_title(t):
-    """재공고 찾기용 공고명: [재공고]·(긴급) 같은 머리말과 공백을 뺀다."""
-    import re
-    t = re.sub(r"^\s*(\[[^\]]*\]|\([^)]*\)|재공고|긴급)\s*", "", str(t or ""))
-    t = re.sub(r"^\s*(\[[^\]]*\]|\([^)]*\)|재공고|긴급)\s*", "", t)
-    return re.sub(r"\s+", "", t)
 
 
 def api_items(url, params):
@@ -525,9 +519,13 @@ class Tracker:
         for f in sorted(glob.glob(os.path.join(DAYS, "*.json"))):
             for r in json.load(open(f, encoding="utf-8")):
                 self.bids.setdefault(r["bidNtceNo"], {})[r["bidNtceOrd"]] = r
+        self.pre_of = {}      # 입찰공고번호 → 사전규격번호 (같은 사전규격에서 나온 공고끼리 묶음)
         for f in sorted(glob.glob(os.path.join(PRE, "*.json"))):
             for r in json.load(open(f, encoding="utf-8")):
                 self.pres[r["bidNtceNo"]] = r
+                for bno in (r.get("bidNtceNoList") or "").split(","):
+                    if bno.strip():
+                        self.pre_of[bno.strip()] = r["bidNtceNo"]
         self.open_api = True      # 낙찰정보서비스 활용신청 여부 (처음 거절되면 이번 실행에선 더 부르지 않음)
         self.open_api_msg = ""
 
@@ -578,91 +576,90 @@ class Tracker:
             stage = f"{stage} ({len(lots)}개 분류)"
         return stage, " · ".join(parts)
 
-    def successor(self, b):
-        """유찰·취소된 공고와 이름·기관이 같고 더 늦게 나온 다른 공고(재공고)."""
-        key = (norm_title(b.get("bidNtceNm")), b.get("ntceInsttNm"))
-        if not key[0]:
-            return None
-        best = None
-        for no, rows in self.bids.items():
-            if no == b.get("bidNtceNo"):
-                continue
-            r = rows[max(rows)]
-            if (norm_title(r.get("bidNtceNm")), r.get("ntceInsttNm")) == key and \
-                    (r.get("bidNtceDate") or "") >= (b.get("bidNtceDate") or "") and (not best or r["bidNtceDate"] > best["bidNtceDate"]):
-                best = r
-        return best
-
-    def bid_stage(self, no, item, depth=0):
+    def bid_stage(self, no, item):
         rows = self.bids.get(no) or {}
         b = dict(item)
         for o in sorted(rows):      # 최신 차수 기준, 빈 칸은 앞 차수 값으로
             b.update({k: v for k, v in rows[o].items() if v not in (None, "")})
         ord_ = b.get("bidNtceOrd") or "000"
         when = lambda label, d, t: f"{label} {d} {t or ''}".strip() if d else ""
-        stage, note = None, ""
         if "취소" in (b.get("bidNtceSttusNm") or ""):
-            stage, note = "취소공고", ""
-        else:
-            close = at_kst(b.get("bidClseDate"), b.get("bidClseTm"))
-            opening = at_kst(b.get("opengDate"), b.get("opengTm"))
-            res = self.opening(no, b.get("bsnsDivNm")) if opening and self.now >= opening else None
-            if res:
-                stage, note = res
-            elif (close or opening) and self.now >= (close or opening):
-                stage, note = "입찰 마감", when("개찰", b.get("opengDate"), b.get("opengTm"))
-            elif ord_ > "000" or (b.get("bidNtceSttusNm") or "") == "정정공고":
-                stage, note = f"정정공고 ({int(ord_)}차)", when("마감", b.get("bidClseDate"), b.get("bidClseTm"))
-            else:
-                stage, note = "입찰공고", when("마감", b.get("bidClseDate"), b.get("bidClseTm"))
-        if (stage == "취소공고" or stage.startswith("유찰")) and depth < 3:
-            nxt = self.successor(b)
-            if nxt:     # 재공고를 이어서 추적
-                s2, n2 = self.bid_stage(nxt["bidNtceNo"], nxt, depth + 1)
-                return f"재공고 · {s2}", f"{stage} 뒤 재공고 {nxt['bidNtceNo']}" + (f" · {n2}" if n2 else "")
-        return stage, note
+            return "취소공고", ""
+        close = at_kst(b.get("bidClseDate"), b.get("bidClseTm"))
+        opening = at_kst(b.get("opengDate"), b.get("opengTm"))
+        res = self.opening(no, b.get("bsnsDivNm")) if opening and self.now >= opening else None
+        if res:
+            return res
+        if (close or opening) and self.now >= (close or opening):
+            return "입찰 마감", when("개찰", b.get("opengDate"), b.get("opengTm"))
+        if ord_ > "000" or (b.get("bidNtceSttusNm") or "") == "정정공고":
+            return f"정정공고 ({int(ord_)}차)", when("마감", b.get("bidClseDate"), b.get("bidClseTm"))
+        return "입찰공고", when("마감", b.get("bidClseDate"), b.get("bidClseTm"))
+
+    def pre_links(self, pre_no, kind):
+        """사전규격번호로 이어진 입찰공고번호들. 파일에 없거나 비어 있으면 번호로 직접 조회."""
+        links = (self.pres.get(pre_no) or {}).get("bidNtceNoList") or ""
+        if not links:      # 접수일이 오래된 사전규격은 파일에 다시 받지 않음
+            op = PRE_OP_BY_KIND.get(kind)
+            try:
+                got = api_items(PRE_URL + op, {"inqryDiv": 2, "bfSpecRgstNo": pre_no}) if op else []
+                links = next((str(x.get("bidNtceNoList")) for x in got if x.get("bidNtceNoList")), "")
+            except (PermissionError, RuntimeError) as e:
+                print(f"사전규격 조회 실패 {pre_no}: {e}", flush=True)
+        return list(dict.fromkeys(x.strip() for x in links.split(",") if x.strip()))
+
+    def group_stage(self, nos, kind):
+        """같은 사전규격번호로 나온 입찰공고들의 상태.
+        나뉜 공고(여러 건)는 각각 적고, 취소·유찰 뒤 같은 사전규격번호로 다시 나온 공고는 재공고로 이어 본다."""
+        got = []
+        for bno in nos:
+            rows = self.bids.get(bno) or {}
+            first = rows[min(rows)] if rows else {}
+            st, nt = self.bid_stage(bno, {"bidNtceNo": bno, "bidNtceOrd": "000", "bsnsDivNm": kind})
+            got.append({"no": bno, "date": first.get("bidNtceDate") or "", "nm": first.get("bidNtceNm") or "",
+                        "stage": "본공고 등록" if st == "입찰공고" else st, "note": nt})
+        dead = lambda g: g["stage"] == "취소공고" or g["stage"].startswith("유찰")
+        live = [g for g in got if not dead(g)]
+        for g in live:      # 이 공고보다 먼저 나왔다가 취소·유찰된 공고가 있으면 재공고
+            before = [d for d in got if dead(d) and d["date"] <= g["date"] and d["no"] < g["no"]]
+            if before:
+                g["stage"], g["note"] = f"재공고 · {g['stage']}", f"{before[-1]['no']} {before[-1]['stage']} 뒤 " + (g["note"] or "")
+        show = live or got
+        if len(show) == 1:
+            g = show[0]
+            return g["stage"], f"공고번호 {g['no']}" + (f" · {g['note'].strip()}" if g["note"].strip() else "")
+        stages = [g["stage"] for g in show]
+        stage = stages[0] if len(set(stages)) == 1 else " / ".join(stages)
+        return f"본공고 {len(show)}건 · {stage}", " · ".join(
+            f"{g['no']}" + (f" {g['nm'][:30]}" if g["nm"] else "") + f" {g['stage']}" for g in show)
 
     def pre_stage(self, item):
         no = item.get("bidNtceNo")
+        nos = self.pre_links(no, item.get("bsnsDivNm"))
+        if nos:
+            return self.group_stage(nos, item.get("bsnsDivNm"))
         cur = self.pres.get(no) or item
-        links = cur.get("bidNtceNoList") or ""
-        if not links:      # 접수일이 오래된 사전규격은 파일에 다시 받지 않으므로 번호로 직접 조회
-            op = PRE_OP_BY_KIND.get(item.get("bsnsDivNm"))
-            try:
-                got = api_items(PRE_URL + op, {"inqryDiv": 2, "bfSpecRgstNo": no}) if op else []
-                links = next((str(x.get("bidNtceNoList")) for x in got if x.get("bidNtceNoList")), "")
-            except (PermissionError, RuntimeError) as e:
-                print(f"사전규격 조회 실패 {no}: {e}", flush=True)
-        nos = list(dict.fromkeys(x.strip() for x in links.split(",") if x.strip()))
-        if len(nos) > 1:    # 취소 뒤 재공고된 번호가 같이 들어 있으면 재공고 쪽만 본다
-            drop = set()
-            for bno in nos:
-                rows = self.bids.get(bno)
-                if rows and "취소" in (rows[max(rows)].get("bidNtceSttusNm") or ""):
-                    nxt = self.successor(rows[max(rows)])
-                    if nxt and nxt["bidNtceNo"] in nos:
-                        drop.add(bno)
-            nos = [x for x in nos if x not in drop]
-        if nos:     # 사전규격 하나가 본공고 여러 건으로 나뉘면 각각 추적
-            got = []
-            for bno in nos:
-                st, nt = self.bid_stage(bno, {"bidNtceNo": bno, "bidNtceOrd": "000", "bsnsDivNm": item.get("bsnsDivNm")})
-                got.append(("본공고 등록" if st == "입찰공고" else st, f"{bno}" + (f" {nt}" if nt else "")))
-            if len(got) == 1:
-                return got[0][0], f"공고번호 {got[0][1]}"
-            stages = [g[0] for g in got]
-            stage = stages[0] if len(set(stages)) == 1 else " / ".join(stages)
-            return f"본공고 {len(got)}건 · {stage}", " · ".join(g[1] for g in got)
         close = at_kst(cur.get("bidClseDate"), cur.get("bidClseTm"))
         if close and self.now >= close:
             return "사전규격 의견 마감", "본공고 기다리는 중"
         return "사전규격 공개", f"의견 마감 {cur.get('bidClseDate', '')} {cur.get('bidClseTm', '')}".strip()
 
+    def saved_bid_stage(self, item):
+        """보관한 입찰공고. 사전규격에서 나온 공고면 같은 사전규격번호의 공고(나뉜 공고·재공고)까지 함께 본다."""
+        no = item.get("bidNtceNo")
+        pre_no = self.pre_of.get(no)
+        if pre_no:
+            nos = self.pre_links(pre_no, item.get("bsnsDivNm")) or [no]
+            if len(nos) > 1:
+                stage, note = self.group_stage(nos, item.get("bsnsDivNm"))
+                return stage, f"사전규격 {pre_no} · {note}"
+        return self.bid_stage(no, item)
+
     def stage(self, row):
         item = row["item"]
         if row["kind"] == "pre":
             return self.pre_stage(item)
-        return self.bid_stage(item.get("bidNtceNo"), item)
+        return self.saved_bid_stage(item)
 
 
 def track_saved():
