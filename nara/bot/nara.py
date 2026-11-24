@@ -475,6 +475,11 @@ CNTRCT_URL = "https://apis.data.go.kr/1230000/ao/CntrctInfoService/"
 CNTRCT_OPS = {"물품": "getCntrctInfoListThng", "용역": "getCntrctInfoListServc",
               "공사": "getCntrctInfoListCnstwk", "외자": "getCntrctInfoListFrgcpt"}
 CNTRCT_STATE = os.path.join(DATA, "contract-scan.json")   # 계약 등록 목록을 어디까지 훑었는지 + 보관 공고와 맞는 계약
+PLAN_URL = "https://apis.data.go.kr/1230000/ao/OrderPlanSttusService/"
+PLAN_OPS = {"물품": "getOrderPlanSttusListThng", "용역": "getOrderPlanSttusListServc",
+            "공사": "getOrderPlanSttusListCnstwk", "외자": "getOrderPlanSttusListFrgcpt"}
+PLAN_STATE = os.path.join(DATA, "plan-scan.json")   # 발주계획 목록을 어디까지 훑었는지 + 입찰공고와 이어진 발주계획
+PLAN_KEEP_DAYS = 180
 PRE_OP_BY_KIND = {v: k for k, v in PRE_OPS.items()}
 
 
@@ -543,6 +548,18 @@ class Tracker:
         except (OSError, ValueError):
             self.cstate = {}
         self.cstate.setdefault("hits", {})
+        try:
+            self.pstate = json.load(open(PLAN_STATE, encoding="utf-8"))
+        except (OSError, ValueError):
+            self.pstate = {}
+        self.pstate.setdefault("plans", {})     # 발주계획번호 → {"d": 게시일, "b": [입찰공고번호...]}
+        self._index_plans()
+
+    def _index_plans(self):
+        self.plan_of = {}     # 입찰공고번호 → 발주계획번호 (같은 발주계획에서 나온 공고끼리 묶음)
+        for pno, p in self.pstate["plans"].items():
+            for bno in p.get("b") or []:
+                self.plan_of[bno] = pno
 
     def call_open(self, ops, no):
         """낙찰정보서비스 한 종류(개찰결과/최종낙찰) 조회. 못 부르면 None."""
@@ -657,7 +674,7 @@ class Tracker:
 
     def pre_stage(self, item):
         no = item.get("bidNtceNo")
-        nos = self.pre_links(no, item.get("bsnsDivNm"))
+        nos = self.with_plan(self.pre_links(no, item.get("bsnsDivNm")))
         if nos:
             return self.group_stage(nos, item.get("bsnsDivNm"))
         cur = self.pres.get(no) or item
@@ -670,11 +687,13 @@ class Tracker:
         """보관한 입찰공고. 사전규격에서 나온 공고면 같은 사전규격번호의 공고(나뉜 공고·재공고)까지 함께 본다."""
         no = item.get("bidNtceNo")
         pre_no = self.pre_of.get(no)
-        if pre_no:
-            nos = self.pre_links(pre_no, item.get("bsnsDivNm")) or [no]
-            if len(nos) > 1:
-                stage, note = self.group_stage(nos, item.get("bsnsDivNm"))
-                return stage, f"사전규격 {pre_no} · {note}"
+        nos = (self.pre_links(pre_no, item.get("bsnsDivNm")) if pre_no else []) or [no]
+        nos = self.with_plan(nos if no in nos else [no] + nos)
+        if len(nos) > 1:
+            stage, note = self.group_stage(nos, item.get("bsnsDivNm"))
+            plan_no = self.plan_of.get(no)
+            head = f"사전규격 {pre_no}" if pre_no else f"발주계획 {plan_no}"
+            return stage, f"{head} · {note}"
         return self.bid_stage(no, item)
 
     # ---- 진행 단계 이력 (나라장터 '진행사항'과 같은 순서) ----
@@ -683,11 +702,26 @@ class Tracker:
         item, kind = row["item"], row["item"].get("bsnsDivNm")
         if row["kind"] == "pre":
             pre_no = item.get("bidNtceNo")
-            return pre_no, self.pre_links(pre_no, kind)
+            return pre_no, self.with_plan(self.pre_links(pre_no, kind))
         no = item.get("bidNtceNo")
         pre_no = self.pre_of.get(no)
         nos = self.pre_links(pre_no, kind) if pre_no else []
-        return pre_no, nos if no in nos else [no] + nos
+        return pre_no, self.with_plan(nos if no in nos else [no] + nos)
+
+    def with_plan(self, nos):
+        """같은 발주계획번호로 이어진 입찰공고까지 더한 목록."""
+        out = list(nos)
+        for no in nos:
+            p = self.pstate["plans"].get(self.plan_of.get(no) or "")
+            out += [b for b in (p or {}).get("b") or [] if b not in out]
+        return out
+
+    def plan_for(self, nos):
+        for no in nos:
+            pno = self.plan_of.get(no)
+            if pno:
+                return pno, self.pstate["plans"][pno]
+        return None, None
 
     def bidders(self, no, kind):
         """개찰 참여 업체 (낙찰정보서비스 개찰완료 목록, 첫 분류). 못 부르면 []."""
@@ -754,6 +788,47 @@ class Tracker:
         json.dump(self.cstate, open(CNTRCT_STATE, "w", encoding="utf-8"), ensure_ascii=False)
         return True
 
+    def scan_plans(self):
+        """지난번 이후 게시된 발주계획을 훑어 입찰공고와 이어진 것을 모은다 (처음엔 30일 전부터). 바뀌면 True."""
+        now = self.now
+        last = self.pstate.get("last")
+        start = dt.datetime.strptime(last, "%Y%m%d%H%M").replace(tzinfo=KST) if last else now - dt.timedelta(days=30)
+        start = max(start - dt.timedelta(hours=1), now - dt.timedelta(days=30))
+        ym = lambda d: f"{d.year:04d}{d.month:02d}"
+        lo = now.replace(day=1) - dt.timedelta(days=170)          # 발주시기 조회 범위는 12달까지
+        hi = (now.replace(day=1) + dt.timedelta(days=190))
+        changed = False
+        try:
+            for kind, op in PLAN_OPS.items():
+                page, seen = 1, 0
+                while True:
+                    items, total = api_items(PLAN_URL + op, {"inqryDiv": 1, "inqryBgnDt": f"{start:%Y%m%d%H%M}", "inqryEndDt": f"{now:%Y%m%d%H%M}",
+                                                             "orderBgnYm": ym(lo), "orderEndYm": ym(hi), "numOfRows": 999, "pageNo": page}, total=True)
+                    for x in items:
+                        bids = [b.strip()[:-3] if len(b.strip()) == 16 else b.strip()
+                                for b in str(x.get("bidNtceNoList") or "").split(",") if b.strip()]
+                        pno = str(x.get("orderPlanUntyNo") or "")
+                        if bids and pno:
+                            new = {"d": str(x.get("nticeDt") or "")[:10], "b": list(dict.fromkeys(bids))}
+                            if self.pstate["plans"].get(pno) != new:
+                                self.pstate["plans"][pno], changed = new, True
+                    seen += len(items)
+                    if not items or seen >= total or page >= 60:
+                        break
+                    page += 1
+        except PermissionError as e:
+            print(f"발주계획: 발주계획현황서비스 활용신청이 필요합니다 ({e})", flush=True)
+            return False
+        except RuntimeError as e:
+            print(f"발주계획 조회 실패: {e}", flush=True)
+            return changed
+        cut = f"{now - dt.timedelta(days=PLAN_KEEP_DAYS):%Y-%m-%d}"
+        self.pstate["plans"] = {k: v for k, v in self.pstate["plans"].items() if (v.get("d") or "9") >= cut}
+        self.pstate["last"] = f"{now:%Y%m%d%H%M}"
+        json.dump(self.pstate, open(PLAN_STATE, "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))
+        self._index_plans()
+        return True
+
     def timeline(self, row):
         """보관 공고 한 건의 단계 카드 목록과 개찰 참여 업체."""
         kind = row["item"].get("bsnsDivNm")
@@ -772,11 +847,12 @@ class Tracker:
         posted = [(no, b) for no, b in bids if b.get("bidNtceDate")] or bids
         opened = [(no, b) for no, b in bids if at_kst(b.get("opengDate"), b.get("opengTm")) and
                   self.now >= at_kst(b.get("opengDate"), b.get("opengTm"))]
-        need = lambda svc: {"need": svc}
         first = lambda lst, k: (lst[-1][1].get(k) if lst else "") or ""
         hit = next((self.cstate["hits"][no] for no in nos[::-1] if no in self.cstate["hits"]), None)
+        plan_no, plan = self.plan_for(nos)
         steps = [
-            {"name": "발주계획", "done": False, "f": [["발주계획번호", ""], ["발주일자", ""]], **need("발주계획현황서비스")},
+            {"name": "발주계획", "done": bool(plan_no), "f": [["발주계획번호", plan_no or ""], ["발주일자", (plan or {}).get("d") or ""]],
+             **({"url": f"https://www.g2b.go.kr/link/PRPA015_01/single/?oderPlanNo={plan_no}"} if plan_no else {})},
             {"name": "요청접수", "done": bool(hit and hit.get("req")), "f": [["요청접수번호", (hit or {}).get("req") or ""], ["접수처리일자", ""]]},
             {"name": "사전규격", "done": bool(pre_no), "f": [["사전규격번호", pre_no or ""], ["규격공개일자", pre.get("bidNtceDate") or ""]]},
             {"name": "입찰공고", "done": bool(posted and posted[-1][0]), "n": len(nos),
@@ -807,6 +883,7 @@ def track_saved():
     if not rows:
         return [], ""
     t, events = Tracker(), []
+    t.scan_plans()      # 발주계획번호로 같은 공고(나뉜 공고·재공고)를 묶으려면 먼저
     wanted = set()
     for r in rows:      # 계약은 입찰공고번호로 바로 찾을 수 없어 새로 등록된 계약 목록을 훑어 맞춰 본다
         try:
