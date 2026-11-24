@@ -1,0 +1,40 @@
+/* s1_3 추가 섹션 : 수소 생산·연료전지 연계 탄소 포집 기술 (.s13 .arti5)
+   기존 .s13 .arti2 / .arti3 / .arti4 규칙을 같은 값으로 이어 씁니다. */
+
+.s13 .arti5 .h2_sub_tit{margin-top: 100px;}
+
+/* 적용 분야 표 : .s13 .arti2 표와 같은 모양 */
+.s13 .arti5 .table_wrap table{width: 100%;}
+.s13 .arti5 .table_wrap table tr > td.td_left{text-align: left; padding: 10px 20px;}
+.s13 .arti5 .table_wrap table tr > td .dot_ul > li{position: relative; line-height: 30px; padding-left: 12px; letter-spacing: -0.03em;}
+.s13 .arti5 .table_wrap table tr > td .dot_ul > li span{position: absolute; left: 0; top: 0;}
+
+/* 시스템 구성도 : .s13 .arti4 figure 와 같은 회색 박스 */
+.s13 .arti5 .h2_fig{display: flex; align-items: center; text-align: center; box-sizing: border-box; background: #f5f5f5; border: 1px solid #ddd; padding: 40px;}
+.s13 .arti5 .h2_fig span{width: 100%;}
+.s13 .arti5 .h2_fig img{max-width: 100%; height: auto;}
+.s13 .arti5 .h2_caption{margin-top: 14px; color: #888; letter-spacing: -0.03em; text-align: center;}
+
+/* 현장 사진 2장 */
+.s13 .arti5 .box_type3 > li.bd_li figure{line-height: 0;}
+.s13 .arti5 .box_type3 > li.bd_li figure img{width: 100%; height: auto;}
+.s13 .arti5 .box_type3 > li.bd_li figcaption{line-height: 1.5; padding: 14px 20px; border-top: 1px solid #ddd; color: #505050; letter-spacing: -0.03em;}
+
+/* 기술 특징 : .s01 .icon_text_col2 재사용, 사진 썸네일만 맞춤 */
+.s13 .arti5 .icon_text_col2 > li{margin-bottom: 30px;}
+.s13 .arti5 .icon_text_col2 > li figure img{width: 105px; height: 105px; object-fit: cover; border: 1px solid #eee; box-sizing: border-box;}
+.s13 .arti5 .icon_text_col2 > li .tbx b{display: block; color: #014099; font-weight: 700;}
+
+/* 수행 실적 표 : .s01 .table_wrap (짙은 남색 머리글) */
+.s13 .arti5 .h2_record th:first-child{width: 40%;}
+.s13 .arti5 .h2_record td{text-align: center;}
+.s13 .arti5 .h2_record td.td_left{text-align: left; padding: 10px 20px;}
+.s13 .arti5 .h2_patent{margin-top: 20px; color: #666; letter-spacing: -0.03em; line-height: 1.7; word-break: keep-all;}
+
+@media (max-width: 1024px){
+	.s13 .arti5 .h2_sub_tit{margin-top: 12vw;}
+	.s13 .arti5 .h2_fig{padding: 3vw 20px;}
+	.s13 .arti5 .icon_text_col2 > li figure img{width: 18vw; height: 18vw;}
+	.s13 .arti5 .table_wrap.h2_record_wrap{width: 100%; overflow-x: auto;}
+	.s13 .arti5 .table_wrap.h2_record_wrap table{min-width: 640px;}
+}
